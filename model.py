@@ -7,61 +7,74 @@ import numpy as np
 
 
 # Model
-class WeatherForecasterTCN(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, output_size, kernel_size=3, dropout=0.2):
-        super(WeatherForecasterTCN, self).__init__()
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        self.output_size = output_size
-        self.kernel_size = kernel_size
+import torch
+import torch.nn as nn
+from torch.nn.utils import weight_norm
 
-        # CNN layers
-        self.cnn = nn.Sequential(
-            nn.Conv2d(input_size, hidden_size, kernel_size, padding='same'),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Conv2d(hidden_size, hidden_size, kernel_size, padding='same'),
-            nn.ReLU(),
-            nn.Dropout(dropout)
-        )
+class TemporalBlock2D(nn.Module):
+    def __init__(self, n_inputs, n_outputs, kernel_size, stride, dilation, padding, dropout=0.2):
+        super(TemporalBlock2D, self).__init__()
 
-        # LSTM layers
-        self.lstm = nn.LSTM(hidden_size, hidden_size, num_layers, batch_first=True, dropout=dropout)
+        # Convolutional layer with weight normalization
+        self.conv1 = weight_norm(nn.Conv2d(n_inputs, n_outputs, kernel_size,
+                                           stride=stride, padding=padding, dilation=dilation))
+        self.relu = nn.ReLU()
 
-        # Fully connected output layer
-        self.fc = nn.Linear(hidden_size, output_size)
+        # Dropout layer
+        self.dropout = nn.Dropout(dropout)
+
+        # Convolutional layer with weight normalization
+        self.conv2 = weight_norm(nn.Conv2d(n_outputs, n_outputs, kernel_size,
+                                           stride=stride, padding=padding, dilation=dilation))
+        
+        # Sequential network
+        self.net = nn.Sequential(self.conv1, self.relu, self.dropout,
+                                 self.conv2, self.relu, self.dropout)
+        
+        # Downsample layer
+        self.downsample = nn.Conv2d(
+            n_inputs, n_outputs, kernel_size=1, stride=stride) if n_inputs != n_outputs else None
+        
+        self.relu = nn.ReLU()
+
+        # Initialize weights
+        self.init_weights()
+
+    def init_weights(self):
+        # Initialize weights with a normal distribution since we are using weight normalization
+        self.conv1.weight.data.normal_(0, 0.01)
+        self.conv2.weight.data.normal_(0, 0.01)
+        if self.downsample is not None:
+            self.downsample.weight.data.normal_(0, 0.01)
 
     def forward(self, x):
-        # x: (batch_size, seq_len, input_size)
+        out = self.net(x)
+        res = x if self.downsample is None else self.downsample(x)
+        return self.relu(out + res)
 
-        # Pass through CNN layers
-        x = self.cnn(x.permute(0, 2, 1))  # (batch_size, hidden_size, seq_len)
-        x = x.permute(0, 2, 1)  # (batch_size, seq_len, hidden_size)
+class TemporalConvNet2D(nn.Module):
+    def __init__(self, num_inputs, num_channels, kernel_size=3, dropout=0.2):
+        super(TemporalConvNet2D, self).__init__()
+        layers = []
+        num_levels = len(num_channels)
 
-        # Pass through LSTM layers
-        _, (h_n, _) = self.lstm(x)  # (num_layers, batch_size, hidden_size)
+        # Create a series of TemporalBlock2D layers
+        for i in range(num_levels):
+            # Calculate the dilation size
+            dilation_size = 2 ** i
+            # Create a TemporalBlock2D layer
+            in_channels = num_inputs if i == 0 else num_channels[i-1]
+            out_channels = num_channels[i]
+            # Append the TemporalBlock2D layer to the list of layers
+            layers += [TemporalBlock2D(in_channels, out_channels, kernel_size, stride=1, dilation=dilation_size,
+                                       padding=((kernel_size-1) * dilation_size, 0), dropout=dropout)]
+            
+        # Create a sequential network
+        self.network = nn.Sequential(*layers)
 
-        # Use the last hidden state from the LSTM
-        out = self.fc(h_n[-1])  # (batch_size, output_size)
-
-        return out    
-
-
-    # Training function
-    def train(model, dataloader, optimizer, criterion, device):
-        model.train()
-        running_loss = 0.0
-        for inputs, labels in dataloader:
-            inputs, labels = inputs.to(device), labels.to(device)
-            optimizer.zero_grad()
-            outputs = model(inputs)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
-            running_loss += loss.item()
-        return running_loss / len(dataloader)
-
+    def forward(self, x):
+        return self.network(x)
+    
 class WeatherForecasterCNNLSTM(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers, output_size, kernel_size=3, dropout=0.2):
         super(WeatherForecasterCNNLSTM, self).__init__()
@@ -104,6 +117,18 @@ class WeatherForecasterCNNLSTM(nn.Module):
         out = self.fc(lstm_out)
 
         return out
+    
+'''
+The input data is expected to have the shape (seq_len, batch_size, grid_data_length, grids_x, grids_y), where grids_x and grids_y represent 
+the number of grids in the x and y directions, respectively.
+
+The CNN part convolves over the spatial dimensions (e.g., grid data) and the output is permuted to have the shape (batch_size, seq_len, 
+hidden_size) for the LSTM part.The CNN part processes each grid in the input sequence separately, producing a sequence of convoluted grids.
+
+The LSTM part consists of a single LSTM layer with num_layers (default is 2) and hidden_size (default is 64). The LSTM processes the sequence
+of hidden states from the CNN part, and the final hidden state h_n[-1] (from the last layer and last time step) is passed through a fully
+connected layer to produce the output of size output_size (default is 1).
+'''
 
 class WeatherForecasterCNNTransformer(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers, output_size, kernel_size=3, dropout=0.2):
@@ -151,3 +176,18 @@ class WeatherForecasterCNNTransformer(nn.Module):
         out = self.fc(transformer_out)
 
         return out
+    
+
+'''
+The Transformer part consists of a TransformerEncoderLayer and a TransformerEncoder with num_layers (default is 2) layers. 
+The Transformer encoder processes the sequence of convoluted grids from the CNN part, attending to the spatial and temporal 
+relationships within the input sequence. The output of the Transformer encoder is passed through a fully connected layer to
+produce the final output.
+
+
+In the WeatherForecasterTCN and WeatherForecasterCNNLSTM models, the timesteps of the LSTM correspond to the sequence length (seq_len) 
+of the input data. The CNN convolves over the spatial dimensions (e.g., grid data) in each time step, extracting local features.
+
+In the WeatherForecasterCNNTransformer model, the Transformer encoder attends to the entire sequence of convoluted grids from the CNN 
+part, capturing both spatial and temporal relationships within the input sequence.
+'''
