@@ -1,6 +1,8 @@
 import math
 import numpy as np
 from sklearn.model_selection import train_test_split
+import torch
+from torch.utils.data import TensorDataset, DataLoader
 import xarray as xr
 
 selection = {
@@ -25,7 +27,7 @@ selection = {
 }
 
 
-def preprocess_data(split_percentage: float, batch_size=20, use_level=False,  window_size=10):
+def preprocess_data(split_percentage=0.8, batch_size=20, use_level=False,  window_size=10):
     obs_path = 'gs://weatherbench2/datasets/era5/1959-2022-6h-64x32_equiangular_conservative.zarr'
     data = xr.open_zarr(obs_path)
 
@@ -89,56 +91,67 @@ def preprocess_data(split_percentage: float, batch_size=20, use_level=False,  wi
     labels = np.stack(labels, axis=0)
 
 
-    total_samples = len(inputs)
-    num_batches = total_samples // batch_size
-    sequence_len = len(default_intervals) - 1
+    num_samples = len(inputs)
+    # num_batches = num_samples // batch_size
+    # sequence_len = len(default_intervals) - 1
     
-    inputs_truncated = inputs[:total_samples - total_samples % batch_size]
-    labels_truncated = labels[:total_samples - total_samples % batch_size]
+    # inputs_truncated = inputs[:total_samples - total_samples % batch_size]
+    # labels_truncated = labels[:total_samples - total_samples % batch_size]
     
     if use_level:
-        # (total_samples, sequence_len, level, lon, lat, features)
-        new_inputs_shape = (num_batches, batch_size, sequence_len, level_size, lon_size, lat_size, feature_size)
-        new_labels_shape = (num_batches, batch_size, 1, level_size, lon_size, lat_size, feature_size)
+        # # (total_samples, sequence_len, level, lon, lat, features)
+        # new_inputs_shape = (num_batches, batch_size, sequence_len, level_size, lon_size, lat_size, feature_size)
+        # new_labels_shape = (num_batches, batch_size, 1, level_size, lon_size, lat_size, feature_size)
         
-        # (num_batches, batch_size, sequence_len, level, lon, lat, features)
-        inputs = inputs_truncated.reshape(new_inputs_shape)
-        labels = labels_truncated.reshape(new_labels_shape)
+        # # (num_batches, batch_size, sequence_len, level, lon, lat, features)
+        # inputs = inputs_truncated.reshape(new_inputs_shape)
+        # labels = labels_truncated.reshape(new_labels_shape)
 
-        # (num_batches, sequence_len, batch_size, features, lat, lon, level)
-        inputs = np.transpose(inputs, (0, 2, 1, 6, 5, 4, 3))
-        labels = np.transpose(labels, (0, 2, 1, 6, 5, 4, 3))
+        # # (num_batches, sequence_len, batch_size, features, lat, lon, level)
+        # inputs = np.transpose(inputs, (0, 2, 1, 6, 5, 4, 3))
+        # labels = np.transpose(labels, (0, 2, 1, 6, 5, 4, 3))
+
+        # (total_samples, sequence_len, features, lat, lon, level)
+        inputs = np.transpose(inputs, (0, 1, 5, 4, 3, 2))
+        labels = np.transpose(labels, (0, 1, 5, 4, 3, 2))
+
+
     else:
-        # (total_samples, sequence_len, lon, lat, features)
-        new_inputs_shape = (num_batches, batch_size, sequence_len, lon_size, lat_size, feature_size)
-        new_labels_shape = (num_batches, batch_size, 1, lon_size, lat_size, feature_size)
+        # # (total_samples, sequence_len, lon, lat, features)
+        # new_inputs_shape = (num_batches, batch_size, sequence_len, lon_size, lat_size, feature_size)
+        # new_labels_shape = (num_batches, batch_size, 1, lon_size, lat_size, feature_size)
         
-        # (num_batches, batch_size, sequence_len, lon, lat, features)
-        inputs = inputs_truncated.reshape(new_inputs_shape)
-        labels = labels_truncated.reshape(new_labels_shape)
+        # # (num_batches, batch_size, sequence_len, lon, lat, features)
+        # inputs = inputs_truncated.reshape(new_inputs_shape)
+        # labels = labels_truncated.reshape(new_labels_shape)
     
-        # (num_batches, sequence_len, batch_size, features, lat, lon)
-        inputs = np.transpose(inputs, (0, 2, 1, 5, 4, 3))
-        labels = np.transpose(labels, (0, 2, 1, 5, 4, 3))
-        
+        # # (num_batches, sequence_len, batch_size, features, lat, lon)
+        # inputs = np.transpose(inputs, (0, 2, 1, 5, 4, 3))
+        # labels = np.transpose(labels, (0, 2, 1, 5, 4, 3))
 
+        # (total_samples, sequence_len, features, lat, lon)
+        inputs = np.transpose(inputs, (0, 1, 4, 3, 2))
+        labels = np.transpose(labels, (0, 1, 4, 3, 2))
+        
 
     #split into training and testing
-    training_size = math.floor(split_percentage*num_batches)
-    X_train = inputs[0:training_size]
-    X_test = inputs[training_size::]
-    Y_train = labels[0:training_size]
-    Y_test = labels[training_size::]
+    training_size = math.floor(split_percentage*num_samples)
+    X_train = torch.tensor(inputs[0:training_size], dtype=torch.float32)
+    X_test = torch.tensor(inputs[training_size::], dtype=torch.float32)
+    Y_train = torch.tensor(labels[0:training_size], dtype=torch.float32)
+    Y_test = torch.tensor(labels[training_size::], dtype=torch.float32)
 
+    # print("x train:", X_train.shape)
+    # print("x test:", X_test.shape)
+    # print("y train:", Y_train.shape)
+    # print("y test:", Y_test.shape)
 
-    # X: (num_batches, sequence_len, batch_size, features, lat, lon)
-    # Y: (num_batches, 1, batch_size, features, lat, lon)
-    print("x train:", X_train.shape)
-    print("x test:", X_test.shape)
-    print("y train:", Y_train.shape)
-    print("y test:", Y_test.shape)
-    
-    return X_train, X_test, Y_train, Y_test
+    # X: (num_samples, sequence_len, features, lat, lon)
+    # Y: (num_samples, 1, features, lat, lon)
+    train_dataset = TensorDataset(X_train, Y_train)
+    test_dataset = TensorDataset(X_test, Y_test)
+
+    return train_dataset, test_dataset
     
 
     # np.save('../data/test_data_array.npy', dataset)
