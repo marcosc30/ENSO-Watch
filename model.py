@@ -6,7 +6,7 @@ from torch.utils.data import Dataset, DataLoader
 import pandas as pd
 import numpy as np
 from S4 import S4Block
-from types import Type, Optional
+from typing import Optional, Type
 from S4reqs import StandardEncoder
 
 
@@ -87,11 +87,11 @@ class WeatherForecasterCNNLSTM(nn.Module):
         # CNN layers
         self.cnn = nn.Sequential(
             nn.Conv2d(input_size, hidden_size, kernel_size, padding='same'),
-            nn.batch_norm2d(hidden_size),
+            nn.BatchNorm2d(hidden_size),
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Conv2d(hidden_size, hidden_size, kernel_size, padding='same'),
-            nn.batch_norm2d(hidden_size),
+            nn.BatchNorm2d(hidden_size),
             nn.ReLU(),
             nn.Dropout(dropout)
         )
@@ -141,7 +141,7 @@ connected layer to produce the output of size output_size (default is 1).
 
 class WeatherForecasterCNNTransformer(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers, output_size, kernel_size=3, dropout=0.2):
-        super(WeatherForecasterCNNLSTM, self).__init__()
+        super(WeatherForecasterCNNTransformer, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers
@@ -151,11 +151,11 @@ class WeatherForecasterCNNTransformer(nn.Module):
         # CNN layers
         self.cnn = nn.Sequential(
             nn.Conv2d(input_size, hidden_size, kernel_size, padding='same'),
-            nn.batch_norm2d(hidden_size),
+            nn.BatchNorm2d(hidden_size),
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Conv2d(hidden_size, hidden_size, kernel_size, padding='same'),
-            nn.batch_norm2d(hidden_size),
+            nn.BatchNorm2d(hidden_size),
             nn.ReLU(),
             nn.Dropout(dropout)
         )
@@ -309,11 +309,11 @@ class WeatherForecasterS4(nn.Module):
 
         self.encoder = nn.Sequential(
             nn.Conv2d(self.input_size, self.hidden_size, self.kernel_size, padding='same'),
-            nn.batch_norm2d(self.hidden_size),
+            nn.BatchNorm2d(self.hidden_size),
             nn.ReLU(),
             nn.Dropout(self.dropout),
             nn.Conv2d(self.hidden_size, self.hidden_size, kernel_size, padding='same'),
-            nn.batch_norm2d(self.hidden_size),
+            nn.BatchNorm2d(self.hidden_size),
             nn.ReLU(),
             nn.Dropout(self.dropout)
         )
