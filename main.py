@@ -4,6 +4,8 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader
 from model import WeatherForecasterCNNLSTM, WeatherForecasterCNNTransformer
 from types import Optional
+from preprocess import preprocess_data
+
 
 def main():
     # Device
@@ -24,21 +26,22 @@ def main():
     model = WeatherForecasterCNNTransformer(input_size, hidden_size, num_layers, output_size, kernel_size, dropout).to(device)
 
     # Dataset
-    dataset = None # fill in dataset
+    train_dataset, test_dataset,  = preprocess_data()
     # Dataloader
-    dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
+    train_data_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+    test_data_loader = DataLoader(test_dataset, batch_size=32, shuffle=True)
 
     # Loss and optimizer
     criterion = nn.MSELoss()
     optimizer = Adam(model.parameters(), lr=learning_rate)
 
     # Train the model
-    train_cnn_lstm(model, dataloader, optimizer, criterion, device, num_epochs)
-    train_cnn_transformer(model, dataloader, optimizer, criterion, device, num_epochs)
+    train_cnn_lstm(model, train_data_loader, optimizer, criterion, device, num_epochs)
+    train_cnn_transformer(model, train_data_loader, optimizer, criterion, device, num_epochs)
 
     # Test the model
-    test_cnn_lstm = test_cnn_lstm(model, dataloader, criterion, device)
-    test_cnn_transformer = test_cnn_transformer(model, dataloader, criterion, device)
+    test_cnn_lstm = test_cnn_lstm(model, test_data_loader, criterion, device)
+    test_cnn_transformer = test_cnn_transformer(model, test_data_loader, criterion, device)
 
 
 def train_cnn_lstm(model, dataloader, optimizer, criterion, device, num_epochs):
