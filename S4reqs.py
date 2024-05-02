@@ -3,6 +3,8 @@ from typing import Any
 
 import torch
 from torch import nn
+from visualize import visualize_results
+
 
 class TemporalAdapter(nn.Module):
     def __init__(self, wrapped: nn.Module) -> None:

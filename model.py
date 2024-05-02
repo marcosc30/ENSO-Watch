@@ -10,7 +10,93 @@ from typing import Optional, Type
 from S4reqs import StandardEncoder
 
 
+class ConvLSTMCell(nn.Module):
+    def __init__(self, input_size, hidden_size, kernel_size):
+        super(ConvLSTMCell, self).__init__()
 
+        # Initialize the parameters
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.kernel_size = kernel_size
+        self.padding = kernel_size // 2
+
+        # Convolutional layers for the input, forget, output, and cell state
+        self.conv = nn.Conv2d(
+            in_channels=input_size + hidden_size,
+            out_channels=4 * hidden_size,
+            kernel_size=kernel_size,
+            padding=self.padding,
+        )
+
+    # Define the forward pass
+    def forward(self, input, prev_state):
+        h_prev, c_prev = prev_state
+
+        # Concatenate along the channel axis
+        combined = torch.cat((input, h_prev), dim=1)
+        combined_conv = self.conv(combined)
+
+        # Split the combined convolutional tensor into separate input, forget, output, and cell state convolutions
+        cc_i, cc_f, cc_o, cc_g = torch.split(combined_conv, self.hidden_size, dim=1)
+
+        # Apply the activation functions
+        i = torch.sigmoid(cc_i)
+        f = torch.sigmoid(cc_f)
+        o = torch.sigmoid(cc_o)
+        g = torch.tanh(cc_g)
+
+        # Update the cell state and hidden state
+        c_next = f * c_prev + i * g
+        h_next = o * torch.tanh(c_next)
+
+        return h_next, c_next
+
+class ConvLSTM(nn.Module):
+    def __init__(self, input_size, hidden_size, kernel_size, num_layers):
+        super(ConvLSTM, self).__init__()
+
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.kernel_size = kernel_size
+        self.num_layers = num_layers
+
+        # Create a list of multiple ConvLSTM cells using nn.ModuleList because the number of layers is a parameter
+        self.cells = nn.ModuleList(
+            [
+                ConvLSTMCell(
+                    input_size=input_size if i == 0 else hidden_size,
+                    hidden_size=hidden_size,
+                    kernel_size=kernel_size,
+                )
+                for i in range(num_layers)
+            ]
+        )
+
+    def forward(self, input, prev_state=None):
+        batch_size, _, height, width = input.size()
+
+        # Initialize the hidden state and cell state for the first time step
+        if prev_state is None:
+            prev_state = [
+                (
+                    torch.zeros(batch_size, self.hidden_size, height, width),
+                    torch.zeros(batch_size, self.hidden_size, height, width),
+                )
+                for _ in range(self.num_layers)
+            ]
+
+        # Initialize a list to store the hidden states and cell states for all layers
+        next_state = []
+
+        # Iterate through each layer, passing the input and hidden states through the ConvLSTM cell for that layer
+        for i, cell in enumerate(self.cells):
+            h_prev, c_prev = prev_state[i]
+            h_next, c_next = cell(input, (h_prev, c_prev))
+            next_state.append((h_next, c_next))
+            input = h_next
+
+        return input, next_state
+    
 class TemporalBlock2D(nn.Module):
     def __init__(self, n_inputs, n_outputs, kernel_size, stride, dilation, padding, dropout=0.2):
         super(TemporalBlock2D, self).__init__()
@@ -48,7 +134,9 @@ class TemporalBlock2D(nn.Module):
             self.downsample.weight.data.normal_(0, 0.01)
 
     def forward(self, x):
+        # Pass the input through the network
         out = self.net(x)
+        # Add the input to the output (residual connection)
         res = x if self.downsample is None else self.downsample(x)
         return self.relu(out + res)
 
@@ -96,10 +184,6 @@ class WeatherForecasterCNNLSTM(nn.Module):
             nn.Dropout(dropout)
         )
         
-        # concatenated_size = grid_data_length * grids_x * grids_y
-        # this should be done in hyperparameters
-        # output_size = concatenate_size, then reshape to (grid_data_length, grids_x, grids_y) in forward pass
-
         # LSTM layers
         self.lstm = nn.LSTM(hidden_size, hidden_size, num_layers, batch_first=True, dropout=dropout)
         
@@ -107,9 +191,7 @@ class WeatherForecasterCNNLSTM(nn.Module):
         self.fc = nn.Linear(hidden_size, output_size)
         
     def forward(self, x):
-        # x: (seq_len, batch_size, grid_data_length, grids_x, grids_y)
-        # grids_x: number of grids in x direction
-        # grids_y: number of grids in y direction
+        # Assume x has dimensions [batch_size, sequence_length, channels, height, width]
         batch_size = x.shape[1]
         grid_data_length = x.shape[2]
         grids_x = x.shape[3]
@@ -126,18 +208,6 @@ class WeatherForecasterCNNLSTM(nn.Module):
         out.reshape(batch_size, grid_data_length, grids_x, grids_y)
 
         return out
-    
-'''
-The input data is expected to have the shape (seq_len, batch_size, grid_data_length, grids_x, grids_y), where grids_x and grids_y represent 
-the number of grids in the x and y directions, respectively.
-
-The CNN part convolves over the spatial dimensions (e.g., grid data) and the output is permuted to have the shape (batch_size, seq_len, 
-hidden_size) for the LSTM part.The CNN part processes each grid in the input sequence separately, producing a sequence of convoluted grids.
-
-The LSTM part consists of a single LSTM layer with num_layers (default is 2) and hidden_size (default is 64). The LSTM processes the sequence
-of hidden states from the CNN part, and the final hidden state h_n[-1] (from the last layer and last time step) is passed through a fully
-connected layer to produce the output of size output_size (default is 1).
-'''
 
 class WeatherForecasterCNNTransformer(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers, output_size, kernel_size=3, dropout=0.2):
@@ -148,7 +218,7 @@ class WeatherForecasterCNNTransformer(nn.Module):
         self.output_size = output_size
         self.kernel_size = kernel_size
 
-        # CNN layers
+        # Adjusted the input channel size to 12 if needed
         self.cnn = nn.Sequential(
             nn.Conv2d(input_size, hidden_size, kernel_size, padding='same'),
             nn.BatchNorm2d(hidden_size),
@@ -160,53 +230,38 @@ class WeatherForecasterCNNTransformer(nn.Module):
             nn.Dropout(dropout)
         )
 
-        # concatenated_size = grid_data_length * grids_x * grids_y
-        # this should be done in hyperparameters
-        # output_size = concatenate_size, then reshape to (grid_data_length, grids_x, grids_y) in forward pass
-        
+        # Resizing layer to match transformer's expected embedding dimension
+        self.resize = nn.Linear(1638400, 10240)  
+
         # Transformer layer
-        self.transformer_encoder_layer = nn.TransformerEncoderLayer(d_model=hidden_size, nhead=8),
-        self.transformer = nn.TransformerEncoder(num_layers=num_layers, encoder_layer=self.transformer_encoder_layer)
+        self.transformer_encoder_layer = nn.TransformerEncoderLayer(d_model=10240, nhead=8)
+        self.transformer = nn.TransformerEncoder(self.transformer_encoder_layer, num_layers=num_layers)
 
-        
         # Fully connected output layer
-        self.fc = nn.Linear(hidden_size, output_size)
-        
+        self.fc = nn.Linear(10240, output_size)
+
     def forward(self, x):
-        # x: (seq_len, batch_size, grid_data_length, grids_x, grids_y)
-        # grids_x: number of grids in x direction
-        # grids_y: number of grids in y direction
-        batch_size = x.shape[1]
-        grid_data_length = x.shape[2]
-        grids_x = x.shape[3]
-        grids_y = x.shape[4]
+        # Assume x has dimensions [batch_size, channels, height, width]
+        batch_size = x.size(0)
 
-        # Separate all of the grids in the sequence
-        convoluted_grids = []
-        for grid in x:
-            # Pass through CNN layers
-            convoluted_grid = self.cnn(grid)
-            convoluted_grids.append(convoluted_grid.flatten())
-        transformer_out = self.transformer(torch.stack(convoluted_grids))
-        out = self.fc(transformer_out)
-        out.reshape(batch_size, grid_data_length, grids_x, grids_y)
+        # Apply CNN layers
+        x = self.cnn(x)  # Output shape [batch_size, hidden_size, new_height, new_width]
+        x = x.view(batch_size, -1)  # Flatten the output
 
-        return out
-    
+        # Resize to correct transformer input dimension
+        x = self.resize(x)  # Resize or project the flattened features to the embedding size
 
-'''
-The Transformer part consists of a TransformerEncoderLayer and a TransformerEncoder with num_layers (default is 2) layers. 
-The Transformer encoder processes the sequence of convoluted grids from the CNN part, attending to the spatial and temporal 
-relationships within the input sequence. The output of the Transformer encoder is passed through a fully connected layer to
-produce the final output.
+        # Prepare for transformer (add sequence length dimension)
+        x = x.unsqueeze(1)  # Transformer expects [batch_size, seq_len, features]
 
+        # Apply Transformer
+        x = self.transformer(x)
 
-In the WeatherForecasterTCN and WeatherForecasterCNNLSTM models, the timesteps of the LSTM correspond to the sequence length (seq_len) 
-of the input data. The CNN convolves over the spatial dimensions (e.g., grid data) in each time step, extracting local features.
+        # Reshape and apply final fully connected layer
+        x = x.view(batch_size, -1)  # Flatten the output of transformer
+        x = self.fc(x)
 
-In the WeatherForecasterCNNTransformer model, the Transformer encoder attends to the entire sequence of convoluted grids from the CNN 
-part, capturing both spatial and temporal relationships within the input sequence.
-'''
+        return x
 
 def _parse_pool_kernel(pool_kernel: Optional[int | tuple[int]]) -> int:
     if pool_kernel is None:
