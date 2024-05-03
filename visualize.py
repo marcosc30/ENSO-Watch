@@ -11,7 +11,10 @@ def plot_training_loss(train_losses, model_names, epochs):
     """
     plt.figure(figsize=(10, 6))
     for i, loss in enumerate(train_losses):
-        plt.plot(range(1, epochs + 1), loss, label=model_names[i])
+        if len(loss) != 0:
+            plt.plot(range(1, epochs + 1), loss, label=model_names[i])
+        # for j in range(len(loss)):
+        #     plt.plot(range(1, epochs + 1), loss[j], label=f'{model_names[i]} - Epoch {j + 1}')
     plt.xlabel('Epochs')
     plt.ylabel('Training Loss')
     plt.title('Training Loss Curves')

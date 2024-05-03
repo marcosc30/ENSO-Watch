@@ -241,7 +241,7 @@ class S4Block(nn.Module):
         activation: Type[nn.Module] = nn.GELU,
         norm_type: Optional[str] = "layer",
         norm_strategy: str = "post",
-        pooling: Optional[nn.AvgPool1d | nn.MaxPool1d] = None,
+        pooling: Optional[Union[nn.AvgPool1d, nn.MaxPool1d]] = None,
     ) -> None:
         super().__init__()
         self.d_model = d_model

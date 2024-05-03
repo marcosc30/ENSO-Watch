@@ -6,7 +6,7 @@ from torch.utils.data import Dataset, DataLoader
 import pandas as pd
 import numpy as np
 from S4 import S4Block
-from typing import Optional, Type
+from typing import Optional, Type, Union
 from S4reqs import StandardEncoder
 
 
@@ -73,7 +73,7 @@ class ConvLSTM(nn.Module):
         )
 
     def forward(self, input, prev_state=None):
-        batch_size, _, height, width = input.size()
+        batch_size, seq_length, grid_data_length, height, width = input.size()
 
         # Initialize the hidden state and cell state for the first time step
         if prev_state is None:
@@ -88,38 +88,46 @@ class ConvLSTM(nn.Module):
         # Initialize a list to store the hidden states and cell states for all layers
         next_state = []
 
-        # Iterate through each layer, passing the input and hidden states through the ConvLSTM cell for that layer
-        for i, cell in enumerate(self.cells):
-            h_prev, c_prev = prev_state[i]
-            h_next, c_next = cell(input, (h_prev, c_prev))
-            next_state.append((h_next, c_next))
-            input = h_next
+        for t in range(seq_length):
+            input_t = input[:, t, ...]
 
-        return input, next_state
+            layer_states = []
+            # Iterate through each layer, passing the input and hidden states through the ConvLSTM cell for that layer
+            for i, cell in enumerate(self.cells):
+                h_prev, c_prev = prev_state[i]
+                h_next, c_next = cell(input_t, (h_prev, c_prev))
+                layer_states.append((h_next, c_next))
+                input_t = h_next
+
+        next_state.append(layer_states)
+        out = torch.reshape(input_t, (batch_size, seq_length, grid_data_length, height, width))
+        return out, next_state
     
 class TemporalBlock2D(nn.Module):
     def __init__(self, n_inputs, n_outputs, kernel_size, stride, dilation, padding, dropout=0.2):
         super(TemporalBlock2D, self).__init__()
 
         # Convolutional layer with weight normalization
-        self.conv1 = weight_norm(nn.Conv2d(n_inputs, n_outputs, kernel_size,
-                                           stride=stride, padding=padding, dilation=dilation))
+        self.conv1 = weight_norm(nn.Conv3d(n_inputs, n_outputs, (1, kernel_size, kernel_size),
+                                           stride=(1, stride, stride), padding=padding, dilation=(1, dilation, dilation)))
         self.relu = nn.ReLU()
 
         # Dropout layer
         self.dropout = nn.Dropout(dropout)
 
         # Convolutional layer with weight normalization
-        self.conv2 = weight_norm(nn.Conv2d(n_outputs, n_outputs, kernel_size,
-                                           stride=stride, padding=padding, dilation=dilation))
+        self.conv2 = weight_norm(nn.Conv3d(n_outputs, n_outputs, (1, kernel_size, kernel_size),
+                                           stride=(1, stride, stride), padding=padding, dilation=(1, dilation, dilation)))
         
         # Sequential network
         self.net = nn.Sequential(self.conv1, self.relu, self.dropout,
                                  self.conv2, self.relu, self.dropout)
         
         # Downsample layer
-        self.downsample = nn.Conv2d(
-            n_inputs, n_outputs, kernel_size=1, stride=stride) if n_inputs != n_outputs else None
+        self.downsample = nn.Sequential(
+            nn.Conv3d(n_inputs, n_outputs, kernel_size=1, stride=(1, stride, stride)),
+            nn.BatchNorm3d(n_outputs)
+        ) if n_inputs != n_outputs else None
         
         self.relu = nn.ReLU()
 
@@ -136,8 +144,10 @@ class TemporalBlock2D(nn.Module):
     def forward(self, x):
         # Pass the input through the network
         out = self.net(x)
+        print(out.shape)
         # Add the input to the output (residual connection)
         res = x if self.downsample is None else self.downsample(x)
+        print(res.shape)
         return self.relu(out + res)
 
 class TemporalConvNet2D(nn.Module):
@@ -155,7 +165,7 @@ class TemporalConvNet2D(nn.Module):
             out_channels = num_channels[i]
             # Append the TemporalBlock2D layer to the list of layers
             layers += [TemporalBlock2D(in_channels, out_channels, kernel_size, stride=1, dilation=dilation_size,
-                                       padding=((kernel_size-1) * dilation_size, 0), dropout=dropout)]
+                                       padding=(0, (kernel_size - 1) * dilation_size, (kernel_size - 1) * dilation_size), dropout=dropout)]
             
         # Create a sequential network
         self.network = nn.Sequential(*layers)
@@ -185,28 +195,41 @@ class WeatherForecasterCNNLSTM(nn.Module):
         )
         
         # LSTM layers
-        self.lstm = nn.LSTM(hidden_size, hidden_size, num_layers, batch_first=True, dropout=dropout)
+        self.lstm = nn.LSTM(hidden_size*4*4, hidden_size, num_layers, batch_first=True, dropout=dropout)
         
         # Fully connected output layer
         self.fc = nn.Linear(hidden_size, output_size)
         
     def forward(self, x):
         # Assume x has dimensions [batch_size, sequence_length, channels, height, width]
-        batch_size = x.shape[1]
+        batch_size = x.shape[0]
         grid_data_length = x.shape[2]
         grids_x = x.shape[3]
         grids_y = x.shape[4]
 
-        # Separate all of the grids in the sequence
+        x = np.transpose(x, (1,0,2,3,4))
+
+         # Separate all of the grids in the sequence
         convoluted_grids = []
         for grid in x:
             # Pass through CNN layers
             convoluted_grid = self.cnn(grid)
             convoluted_grids.append(convoluted_grid)
-        lstm_out = self.lstm(torch.stack(convoluted_grids))
-        out = self.fc(lstm_out)
-        out.reshape(batch_size, grid_data_length, grids_x, grids_y)
 
+        seq_length, batch_size, _, _, _ = torch.stack(convoluted_grids).shape
+        # [seq_length, batch_size, grid_data_length * grids_x * grids_y]
+        lstm_in = torch.reshape(torch.stack(convoluted_grids), (seq_length, batch_size, -1))
+
+        # [seq_length, batch_size, hidden_size]
+        lstm_out, _ = self.lstm(lstm_in)
+
+        # [1, batch_size, output_size]
+        lstm_out_aggregated = torch.mean(lstm_out, dim=0, keepdim=True)
+        out = self.fc(lstm_out_aggregated)
+        out = torch.reshape(out, (1, batch_size, grid_data_length, grids_x, grids_y))
+        out = torch.permute(out, (1,0,2,3,4))
+
+        # [batch_size, 1, grids_data_length, grids_x, grids_y]
         return out
 
 class WeatherForecasterCNNTransformer(nn.Module):
@@ -220,7 +243,7 @@ class WeatherForecasterCNNTransformer(nn.Module):
 
         # Adjusted the input channel size to 12 if needed
         self.cnn = nn.Sequential(
-            nn.Conv2d(input_size, hidden_size, kernel_size, padding='same'),
+            nn.Conv2d(12*10, hidden_size, kernel_size, padding='same'),
             nn.BatchNorm2d(hidden_size),
             nn.ReLU(),
             nn.Dropout(dropout),
@@ -231,21 +254,25 @@ class WeatherForecasterCNNTransformer(nn.Module):
         )
 
         # Resizing layer to match transformer's expected embedding dimension
-        self.resize = nn.Linear(1638400, 10240)  
+        self.resize = nn.Linear(12*10*4*4, hidden_size)  
 
         # Transformer layer
-        self.transformer_encoder_layer = nn.TransformerEncoderLayer(d_model=10240, nhead=8)
+        self.transformer_encoder_layer = nn.TransformerEncoderLayer(d_model=hidden_size, nhead=8)
         self.transformer = nn.TransformerEncoder(self.transformer_encoder_layer, num_layers=num_layers)
 
         # Fully connected output layer
-        self.fc = nn.Linear(10240, output_size)
+        self.fc = nn.Linear(hidden_size, output_size)
 
     def forward(self, x):
+        # x : [batch_size, seq_length, grid_data_length, grids_x, grids_y]
         # Assume x has dimensions [batch_size, channels, height, width]
-        batch_size = x.size(0)
+        batch_size, seq_length, grid_data_length, grids_x, grids_y = x.shape
+        x = x.view((batch_size, -1, grids_x, grids_y))
 
         # Apply CNN layers
         x = self.cnn(x)  # Output shape [batch_size, hidden_size, new_height, new_width]
+
+        # x : [batch_size, hidden_size * height * width]
         x = x.view(batch_size, -1)  # Flatten the output
 
         # Resize to correct transformer input dimension
@@ -261,9 +288,12 @@ class WeatherForecasterCNNTransformer(nn.Module):
         x = x.view(batch_size, -1)  # Flatten the output of transformer
         x = self.fc(x)
 
+        x = torch.reshape(x, (1, batch_size, grid_data_length, grids_x, grids_y))
+        x = torch.permute(x, (1,0,2,3,4))
+
         return x
 
-def _parse_pool_kernel(pool_kernel: Optional[int | tuple[int]]) -> int:
+def _parse_pool_kernel(pool_kernel: Optional[Union[int, tuple[int]]]) -> int:
     if pool_kernel is None:
         return 1
     elif isinstance(pool_kernel, tuple):
@@ -277,7 +307,7 @@ def _parse_pool_kernel(pool_kernel: Optional[int | tuple[int]]) -> int:
 def _seq_length_schedule(
     n_blocks: int,
     l_max: int,
-    pool_kernel: Optional[int | tuple[int]],
+    pool_kernel: Optional[Union[int, tuple[int]]],
 ) -> list[tuple[int, int]]:
     ppk = _parse_pool_kernel(pool_kernel)
 
@@ -334,7 +364,7 @@ class WeatherForecasterS4(nn.Module):
         activation: Type[nn.Module] = nn.GELU,
         norm_type: Optional[str] = "layer",
         norm_strategy: str = "post",
-        pooling: Optional[nn.AvgPool1d | nn.MaxPool1d] = None,
+        pooling: Optional[Union[nn.AvgPool1d, nn.MaxPool1d]] = None,
         kernel_size=3
     ) -> None:
         super().__init__()

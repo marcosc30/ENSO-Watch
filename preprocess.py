@@ -21,7 +21,7 @@ selection = {
         'total_column_water_vapour'
     ],
     "levels": [500, 700, 850],
-    "time_slice": slice('2020-01-01', '2020-3-25'),
+    "time_slice": slice('2016-01-01', '2022-01-01'),
     "lat_slice": slice(30,50),
     "long_slice": slice(70,90),
 }
@@ -31,6 +31,7 @@ def preprocess_data(split_percentage=0.8, batch_size=20, use_level=False,  windo
     obs_path = 'gs://weatherbench2/datasets/era5/1959-2022-6h-64x32_equiangular_conservative.zarr'
     data = xr.open_zarr(obs_path)
 
+    print("preprocessing")
     print("dataset shape: ", data.sizes)
 
     data = data[selection['variables']].sel(level=selection['levels'], time=selection['time_slice'],
@@ -132,7 +133,15 @@ def preprocess_data(split_percentage=0.8, batch_size=20, use_level=False,  windo
         # (total_samples, sequence_len, features, lat, lon)
         inputs = np.transpose(inputs, (0, 1, 4, 3, 2))
         labels = np.transpose(labels, (0, 1, 4, 3, 2))
-        
+
+    #normalization
+    input_mean = np.mean(inputs)
+    input_std = np.std(inputs)
+    label_mean = np.mean(labels)
+    label_std = np.std(labels)
+
+    inputs = (inputs - input_mean) / input_std
+    labels = (labels - label_mean) / label_std
 
     #split into training and testing
     training_size = math.floor(split_percentage*num_samples)
@@ -140,6 +149,7 @@ def preprocess_data(split_percentage=0.8, batch_size=20, use_level=False,  windo
     X_test = torch.tensor(inputs[training_size::], dtype=torch.float32)
     Y_train = torch.tensor(labels[0:training_size], dtype=torch.float32)
     Y_test = torch.tensor(labels[training_size::], dtype=torch.float32)
+
 
     # print("x train:", X_train.shape)
     # print("x test:", X_test.shape)
@@ -150,6 +160,9 @@ def preprocess_data(split_percentage=0.8, batch_size=20, use_level=False,  windo
     # Y: (num_samples, 1, features, lat, lon)
     train_dataset = TensorDataset(X_train, Y_train)
     test_dataset = TensorDataset(X_test, Y_test)
+
+    torch.save(train_dataset, './data/train_dataset_norm_simple.pth')
+    torch.save(test_dataset, './data/test_dataset_norm_simple.pth')
 
     return train_dataset, test_dataset
     
