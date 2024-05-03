@@ -181,7 +181,7 @@ class WeatherForecasterCNNLSTM(nn.Module):
         self.num_layers = num_layers
         self.output_size = output_size
         self.kernel_size = kernel_size
-
+        
         # CNN layers
         self.cnn = nn.Sequential(
             nn.Conv2d(input_size, hidden_size, kernel_size, padding='same'),
@@ -203,31 +203,32 @@ class WeatherForecasterCNNLSTM(nn.Module):
     def forward(self, x):
         # Assume x has dimensions [batch_size, sequence_length, channels, height, width]
         batch_size = x.shape[0]
+        seq_length = x.shape[1]
         grid_data_length = x.shape[2]
         grids_x = x.shape[3]
         grids_y = x.shape[4]
 
         x = np.transpose(x, (1,0,2,3,4))
 
-         # Separate all of the grids in the sequence
+        # Separate all of the grids in the sequence
         convoluted_grids = []
         for grid in x:
             # Pass through CNN layers
             convoluted_grid = self.cnn(grid)
             convoluted_grids.append(convoluted_grid)
 
-        seq_length, batch_size, _, _, _ = torch.stack(convoluted_grids).shape
-        # [seq_length, batch_size, grid_data_length * grids_x * grids_y]
-        lstm_in = torch.reshape(torch.stack(convoluted_grids), (seq_length, batch_size, -1))
+        # [batch_size, seq_length, grid_data_length * grids_x * grids_y]
+        lstm_in = torch.reshape(torch.stack(convoluted_grids), (batch_size, seq_length, -1))
 
-        # [seq_length, batch_size, hidden_size]
+        # [batch_size, seq_length, hidden_size]
         lstm_out, _ = self.lstm(lstm_in)
 
-        # [1, batch_size, output_size]
-        lstm_out_aggregated = torch.mean(lstm_out, dim=0, keepdim=True)
-        out = self.fc(lstm_out_aggregated)
-        out = torch.reshape(out, (1, batch_size, grid_data_length, grids_x, grids_y))
-        out = torch.permute(out, (1,0,2,3,4))
+        # [batch_size, hidden_size]
+        lstm_out = lstm_out[:, -1, :]
+
+        # [batch_size, output_size]
+        out = self.fc(lstm_out)
+        out = torch.reshape(out, (batch_size, 1, grid_data_length, grids_x, grids_y))
 
         # [batch_size, 1, grids_data_length, grids_x, grids_y]
         return out

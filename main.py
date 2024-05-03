@@ -26,7 +26,7 @@ def main():
     # Make each of the 4 models
     CNNLSTM = WeatherForecasterCNNLSTM(input_size, 64, num_layers, output_size, kernel_size, dropout).to(device)
     # CNNTransformer = WeatherForecasterCNNTransformer(input_size, 120, num_layers, output_size, kernel_size, dropout).to(device)
-    TCN = TemporalConvNet2D(10, [10], kernel_size, dropout).to(device)
+    # TCN = TemporalConvNet2D(10, [10], kernel_size, dropout).to(device)
     # CLSTM = ConvLSTM(input_size, 120, kernel_size, num_layers).to(device)
 
     # Dataset
@@ -50,17 +50,18 @@ def main():
 
     #Train and test
     for epoch in range(num_epochs):
-        # train_losses[0].append(train(CNNLSTM, train_data_loader, optimizer, criterion, device, epoch, num_epochs))
+        train_losses[0].append(train(CNNLSTM, train_data_loader, optimizer, criterion, device, epoch, num_epochs))
         # train_losses[1].append(train(CNNTransformer, train_data_loader, optimizer, criterion, device, epoch, num_epochs))
-        train_losses[2].append(train(TCN, train_data_loader, optimizer, criterion, device, epoch, num_epochs))
+        # train_losses[2].append(train(TCN, train_data_loader, optimizer, criterion, device, epoch, num_epochs))
         # train_losses[3].append(train(CLSTM, train_data_loader, optimizer, criterion, device, epoch, num_epochs))
 
     
-    # test_losses.append(test(CNNLSTM, test_data_loader, criterion, device))
+    test_losses.append(test(CNNLSTM, test_data_loader, criterion, device))
     # test_losses.append(test(CNNTransformer, test_data_loader, criterion, device))
-    test_losses.append(test(TCN, test_data_loader, criterion, device))
+    # test_losses.append(test(TCN, test_data_loader, criterion, device))
     # test_losses.append(test(CLSTM, test_data_loader, criterion, device))
 
+    
     # Visualize the results
     visualize_results(train_losses, test_losses, model_names, num_epochs)
 
@@ -72,7 +73,7 @@ def train(model, dataloader, optimizer, criterion, device, epoch, num_epochs):
     for inputs, labels in progress_bar:
         inputs, labels = inputs.to(device), labels.to(device)
         optimizer.zero_grad()
-        outputs, _ = model(inputs)
+        outputs = model(inputs)
         loss = criterion(outputs, labels)
         loss.backward()
         optimizer.step()
@@ -90,7 +91,8 @@ def test(model, dataloader, criterion, device):
     with torch.no_grad():
         for inputs, labels in dataloader:
             inputs, labels = inputs.to(device), labels.to(device)
-            outputs, _ = model(inputs)
+            outputs = model(inputs)
+            print(outputs)
             loss = criterion(outputs, labels)
             running_loss += loss.item()
     return running_loss / len(dataloader)

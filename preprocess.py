@@ -134,14 +134,36 @@ def preprocess_data(split_percentage=0.8, batch_size=20, use_level=False,  windo
         inputs = np.transpose(inputs, (0, 1, 4, 3, 2))
         labels = np.transpose(labels, (0, 1, 4, 3, 2))
 
-    #normalization
-    input_mean = np.mean(inputs)
-    input_std = np.std(inputs)
-    label_mean = np.mean(labels)
-    label_std = np.std(labels)
+    # print('BEFORE')
+    # print(inputs[0])
+    # print(labels[0])
+    # normalization
+    flattened_inputs = inputs.reshape(-1, inputs.shape[2])
+    flattened_labels = labels.reshape(-1, labels.shape[2])
 
-    inputs = (inputs - input_mean) / input_std
-    labels = (labels - label_mean) / label_std
+    inputs_mean = np.mean(flattened_inputs, axis=0).reshape(1,1,12,1,1)
+    labels_mean = np.mean(flattened_labels, axis=0).reshape(1,1,12,1,1)
+    inputs_std = np.std(flattened_inputs, axis=0).reshape(1,1,12,1,1)
+    labels_std = np.std(flattened_labels, axis=0).reshape(1,1,12,1,1)
+
+    normalized_inputs = (inputs - inputs_mean) / inputs_std 
+    normalized_labels = (labels - labels_mean) / labels_std
+
+    inputs = normalized_inputs.reshape(inputs.shape)
+    labels = normalized_labels.reshape(labels.shape)
+
+    # normalization
+    # input_mean = np.mean(inputs)
+    # input_std = np.std(inputs)
+    # label_mean = np.mean(labels)
+    # label_std = np.std(labels)
+
+    # normalized_inputs = (inputs - input_mean) / input_std
+    # normalized_labels = (labels - label_mean) / label_std
+
+    # print("NORMALIZED")
+    # print(inputs[0])
+    # print(labels[0])
 
     #split into training and testing
     training_size = math.floor(split_percentage*num_samples)
@@ -149,7 +171,6 @@ def preprocess_data(split_percentage=0.8, batch_size=20, use_level=False,  windo
     X_test = torch.tensor(inputs[training_size::], dtype=torch.float32)
     Y_train = torch.tensor(labels[0:training_size], dtype=torch.float32)
     Y_test = torch.tensor(labels[training_size::], dtype=torch.float32)
-
 
     # print("x train:", X_train.shape)
     # print("x test:", X_test.shape)
