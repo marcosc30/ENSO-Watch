@@ -192,46 +192,46 @@ class WeatherForecasterCNNLSTM(nn.Module):
         self.fc = nn.Linear(hidden_size, output_size)
         
     def forward(self, x):
-        # Assume x has dimensions [batch_size, sequence_length, channels, height, width]
-        batch_size, seq_length, grid_data_length, grids_x, grids_y = x.size()
-
-        # [seq_len, batch_size, channels, height, width]
-        cnn_out = [self.cnn(x[:, t]) for t in range(seq_length)]
-
-        # [batch_size, seq_len, hidden_size * 4 * 4]
-        cnn_out = torch.stack([o.view(batch_size, -1) for o in cnn_out], dim=1)
-
-        # [batch_size, seq_length, hidden_size * 4 * 4]
-        lstm_out, _ = self.lstm(cnn_out)
-        
-        # [batch_size, hidden_size]
-        lstm_out = lstm_out[:, -1, :]
-
-        # [batch_size, 1, grids_data_length, grids_x, grids_y]
-        output = torch.reshape(self.fc(lstm_out), (batch_size, 1, grid_data_length, grids_x, grids_y))
-       
-        return output
-    
-        # # Assume x has dimensions [sequence_length, batch_size, channels, height, width]
+        # # Assume x has dimensions [batch_size, sequence_length, channels, height, width]
         # batch_size, seq_length, grid_data_length, grids_x, grids_y = x.size()
 
-        # torch.permute(x, (1, 0, 2, 3, 4))
+        # # [seq_len, batch_size, channels, height, width]
+        # cnn_out = [self.cnn(x[:, t]) for t in range(seq_length)]
 
-        # # Separate all of the grids in the sequence
-        # convoluted_grids = []
-        # for grid in x:
-        #     # Pass through CNN layers
-        #     convoluted_grid = self.cnn(grid)
-        #     convoluted_grids.append(convoluted_grid.flatten())
+        # # [batch_size, seq_len, hidden_size * 4 * 4]
+        # cnn_out = torch.stack([o.view(batch_size, -1) for o in cnn_out], dim=1)
 
-        # output_sequence, (final_hidden_state, final_cell_state) = self.lstm(torch.reshape(torch.stack(convoluted_grids), (batch_size, seq_length, -1)))
-        # #lstm_out = self.lstm(torch.stack(convoluted_grids))
+        # # [batch_size, seq_length, hidden_size * 4 * 4]
+        # lstm_out, _ = self.lstm(cnn_out)
         
-        # lstm_out = output_sequence[:, -1, :]
-        # out = self.fc(lstm_out)
-        # out = torch.reshape(out, (batch_size, 1, grid_data_length, grids_x, grids_y))
+        # # [batch_size, hidden_size]
+        # lstm_out = lstm_out[:, -1, :]
 
-        # return out
+        # # [batch_size, 1, grids_data_length, grids_x, grids_y]
+        # output = torch.reshape(self.fc(lstm_out), (batch_size, 1, grid_data_length, grids_x, grids_y))
+       
+        # return output
+    
+        # Assume x has dimensions [sequence_length, batch_size, channels, height, width]
+        batch_size, seq_length, grid_data_length, grids_x, grids_y = x.size()
+
+        torch.permute(x, (1, 0, 2, 3, 4))
+
+        # Separate all of the grids in the sequence
+        convoluted_grids = []
+        for grid in x:
+            # Pass through CNN layers
+            convoluted_grid = self.cnn(grid)
+            convoluted_grids.append(convoluted_grid.flatten())
+
+        output_sequence, (final_hidden_state, final_cell_state) = self.lstm(torch.reshape(torch.stack(convoluted_grids), (batch_size, seq_length, -1)))
+        #lstm_out = self.lstm(torch.stack(convoluted_grids))
+        
+        lstm_out = output_sequence[:, -1, :]
+        out = self.fc(lstm_out)
+        out = torch.reshape(out, (batch_size, 1, grid_data_length, grids_x, grids_y))
+
+        return out
     
 
 
@@ -256,9 +256,6 @@ class WeatherForecasterCNNTransformer(nn.Module):
             nn.ReLU(),
             nn.Dropout(dropout)
         )
-
-        # Resizing layer to match transformer's expected embedding dimension
-        self.resize = nn.Linear(10*12*4*4, hidden_size)  
 
         # Transformer layer
         self.transformer_encoder_layer = nn.TransformerEncoderLayer(d_model=hidden_size * 4 * 4, nhead=8)

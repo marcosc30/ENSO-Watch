@@ -20,8 +20,8 @@ selection = {
         'toa_incident_solar_radiation',
         'total_column_water_vapour'
     ],
-    "levels": [500, 700, 850],
-    "time_slice": slice('2016-01-01', '2022-01-01'),
+    "levels": [500],
+    "time_slice": slice('2016-01-01', '2017-01-01'),
     "lat_slice": slice(30,50),
     "long_slice": slice(70,90),
 }
@@ -182,8 +182,8 @@ def preprocess_data(split_percentage=0.8, batch_size=20, use_level=False,  windo
     train_dataset = TensorDataset(X_train, Y_train)
     test_dataset = TensorDataset(X_test, Y_test)
 
-    torch.save(train_dataset, './data/train_dataset_norm_simple.pth')
-    torch.save(test_dataset, './data/test_dataset_norm_simple.pth')
+    torch.save(train_dataset, './data/train_dataset_norm_one_year.pth')
+    torch.save(test_dataset, './data/test_dataset_norm_one_year.pth')
 
     return train_dataset, test_dataset
     
