@@ -267,7 +267,7 @@ class WeatherForecasterCNNTransformer(nn.Module):
         )
 
         # Resizing layer to match transformer's expected embedding dimension
-        self.resize = nn.Linear(12*10*4*4, hidden_size)  
+        self.resize = nn.Linear(10*12*4*4, hidden_size)  
 
         # Transformer layer
         self.transformer_encoder_layer = nn.TransformerEncoderLayer(d_model=hidden_size, nhead=8)
@@ -278,7 +278,6 @@ class WeatherForecasterCNNTransformer(nn.Module):
 
     def forward(self, x):
         # x : [batch_size, seq_length, grid_data_length, grids_x, grids_y]
-        # Assume x has dimensions [batch_size, channels, height, width]
         batch_size, seq_length, grid_data_length, grids_x, grids_y = x.size()
         x = x.view((batch_size, -1, grids_x, grids_y))
 
