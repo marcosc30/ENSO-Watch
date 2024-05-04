@@ -24,8 +24,8 @@ def main():
     num_epochs = 10
 
     # Make each of the 4 models
-    CNNLSTM = WeatherForecasterCNNLSTM(input_size, 64, num_layers, output_size, kernel_size, dropout).to(device)
-    # CNNTransformer = WeatherForecasterCNNTransformer(input_size, 120, num_layers, output_size, kernel_size, dropout).to(device)
+    # CNNLSTM = WeatherForecasterCNNLSTM(input_size, 64, num_layers, output_size, kernel_size, dropout).to(device)
+    CNNTransformer = WeatherForecasterCNNTransformer(input_size, 120, num_layers, output_size, kernel_size, dropout).to(device)
     # TCN = TemporalConvNet2D(10, [10], kernel_size, dropout).to(device)
     # CLSTM = ConvLSTM(input_size, 120, kernel_size, num_layers).to(device)
 
@@ -41,7 +41,7 @@ def main():
     # Loss and optimizers for each model
     criterion = nn.MSELoss()
     # print(CNNLSTM.parameters())
-    optimizer = Adam(CNNLSTM.parameters(), lr=learning_rate)
+    optimizer = Adam(CNNTransformer.parameters(), lr=learning_rate)
 
     # Lists to store training and test losses
     train_losses = [[], [], [], []]  # For each model
@@ -50,14 +50,14 @@ def main():
 
     #Train and test
     for epoch in range(num_epochs):
-        train_losses[0].append(train(CNNLSTM, train_data_loader, optimizer, criterion, device, epoch, num_epochs))
-        # train_losses[1].append(train(CNNTransformer, train_data_loader, optimizer, criterion, device, epoch, num_epochs))
+        # train_losses[0].append(train(CNNLSTM, train_data_loader, optimizer, criterion, device, epoch, num_epochs))
+        train_losses[1].append(train(CNNTransformer, train_data_loader, optimizer, criterion, device, epoch, num_epochs))
         # train_losses[2].append(train(TCN, train_data_loader, optimizer, criterion, device, epoch, num_epochs))
         # train_losses[3].append(train(CLSTM, train_data_loader, optimizer, criterion, device, epoch, num_epochs))
 
     
-    test_losses.append(test(CNNLSTM, test_data_loader, criterion, device))
-    # test_losses.append(test(CNNTransformer, test_data_loader, criterion, device))
+    # test_losses.append(test(CNNLSTM, test_data_loader, criterion, device))
+    test_losses.append(test(CNNTransformer, test_data_loader, criterion, device))
     # test_losses.append(test(TCN, test_data_loader, criterion, device))
     # test_losses.append(test(CLSTM, test_data_loader, criterion, device))
 

@@ -207,10 +207,10 @@ class WeatherForecasterCNNLSTM(nn.Module):
         # [seq_len, batch_size, channels, height, width]
         cnn_out = [self.cnn(x[:, t]) for t in range(seq_length)]
 
-        # [batch_size, seq_len, feature_len]
+        # [batch_size, seq_len, hidden_size * 4 * 4]
         cnn_out = torch.stack([o.view(batch_size, -1) for o in cnn_out], dim=1)
 
-        # [batch_size, seq_length, hidden_size]
+        # [batch_size, seq_length, hidden_size * 4 * 4]
         lstm_out, _ = self.lstm(cnn_out)
         
         # [batch_size, hidden_size]
@@ -266,44 +266,34 @@ class WeatherForecasterCNNTransformer(nn.Module):
             nn.Dropout(dropout)
         )
 
-        # Resizing layer to match transformer's expected embedding dimension
-        self.resize = nn.Linear(10*12*4*4, hidden_size)  
-
         # Transformer layer
-        self.transformer_encoder_layer = nn.TransformerEncoderLayer(d_model=hidden_size, nhead=8)
+        self.transformer_encoder_layer = nn.TransformerEncoderLayer(d_model=hidden_size * 4 * 4, nhead=8)
         self.transformer = nn.TransformerEncoder(self.transformer_encoder_layer, num_layers=num_layers)
 
         # Fully connected output layer
-        self.fc = nn.Linear(hidden_size, output_size)
+        self.fc = nn.Linear(hidden_size*4*4, output_size)
 
     def forward(self, x):
         # x : [batch_size, seq_length, grid_data_length, grids_x, grids_y]
         batch_size, seq_length, grid_data_length, grids_x, grids_y = x.size()
-        x = x.view((batch_size, -1, grids_x, grids_y))
 
-        # Apply CNN layers
-        x = self.cnn(x)  # Output shape [batch_size, hidden_size, new_height, new_width]
+        # [seq_len, batch_size, channels, height, width]
+        cnn_out = [self.cnn(x[:, t]) for t in range(seq_length)] 
 
-        # x : [batch_size, hidden_size * height * width]
-        x = x.view(batch_size, -1)  # Flatten the output
+        # [batch_size, seq_len, hidden_size * 4 * 4]
+        cnn_out = torch.stack([o.view(batch_size, -1) for o in cnn_out], dim=1)
 
-        # Resize to correct transformer input dimension
-        x = self.resize(x)  # Resize or project the flattened features to the embedding size
+        # [seq_len, batch_size, hidden_size * 4 * 4]
+        cnn_out = cnn_out.permute(1,0,2)
 
-        # Prepare for transformer (add sequence length dimension)
-        x = x.unsqueeze(1)  # Transformer expects [batch_size, seq_len, features]
+        # [batch_size, hidden_size]
+        transformer_out = self.transformer(cnn_out)
+        transformer_out = transformer_out[-1]
 
-        # Apply Transformer
-        x = self.transformer(x)
+        # [batch_size, 1, grids_data_length, grids_x, grids_y]
+        output = torch.reshape(self.fc(transformer_out), (batch_size, 1, grid_data_length, grids_x, grids_y))
 
-        # Reshape and apply final fully connected layer
-        x = x.view(batch_size, -1)  # Flatten the output of transformer
-        x = self.fc(x)
-
-        x = torch.reshape(x, (1, batch_size, grid_data_length, grids_x, grids_y))
-        x = torch.permute(x, (1,0,2,3,4))
-
-        return x
+        return output
 
 def _parse_pool_kernel(pool_kernel: Optional[Union[int, tuple[int]]]) -> int:
     if pool_kernel is None:
