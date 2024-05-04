@@ -40,7 +40,7 @@ def main():
 
     # Loss and optimizers for each model
     criterion = nn.MSELoss()
-    print(CNNLSTM.parameters())
+    # print(CNNLSTM.parameters())
     optimizer = Adam(CNNLSTM.parameters(), lr=learning_rate)
 
     # Lists to store training and test losses
@@ -92,7 +92,6 @@ def test(model, dataloader, criterion, device):
         for inputs, labels in dataloader:
             inputs, labels = inputs.to(device), labels.to(device)
             outputs = model(inputs)
-            print(outputs)
             loss = criterion(outputs, labels)
             running_loss += loss.item()
     return running_loss / len(dataloader)
