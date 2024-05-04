@@ -4,7 +4,6 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader
 from model import WeatherForecasterCNNLSTM, WeatherForecasterCNNTransformer, TemporalConvNet2D, ConvLSTM
 from typing import Optional
-from preprocess import preprocess_data
 from tqdm import tqdm
 from visualize import visualize_results
 
@@ -14,30 +13,38 @@ def main():
 
     # Hyperparameters
     input_size = 1
-    hidden_size = 2
+    hidden_size_cnnlstm = 64
+    hidden_size_cnntransformer = 64
+    hidden_size_tcn = 64
+    hidden_size_clstm = 64
     num_layers = 2
     output_size = 12 * 4 * 4
     kernel_size = 3
     dropout = 0.2
-    learning_rate = 0.001
+    learning_rate = 0.005
     num_epochs = 10
     num_features = 12
 
     # Make each of the 4 models
-    CNNLSTM = WeatherForecasterCNNLSTM(num_features, hidden_size, num_layers, output_size, kernel_size, dropout).to(device)
-    CNNTransformer = WeatherForecasterCNNTransformer(num_features, hidden_size, num_layers, output_size, kernel_size, dropout).to(device)
+    CNNLSTM = WeatherForecasterCNNLSTM(num_features, hidden_size_cnnlstm, num_layers, output_size, kernel_size, dropout).to(device)
+    CNNTransformer = WeatherForecasterCNNTransformer(num_features, hidden_size_cnntransformer, num_layers, output_size, kernel_size, dropout).to(device)
     #TCN = TemporalConvNet2D(input_size, num_features, kernel_size, dropout) #(input_size, hidden_size, num_layers, output_size, kernel_size, dropout).to(device)
     #CLSTM = ConvLSTM(input_size, hidden_size, num_layers, output_size, kernel_size, dropout).to(device)
 
     # Dataset
-    train_dataset, test_dataset = preprocess_data()
+    # train_dataset, test_dataset = preprocess_data()
+    train_dataset = torch.load('./data/train_dataset_norm_simple.pth')
+    test_dataset = torch.load('./data/test_dataset_norm_simple.pth')
 
     # Dataloader
     train_data_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
     test_data_loader = DataLoader(test_dataset, batch_size=32, shuffle=True)
 
     # Loss and optimizers for each model
-    criterion = nn.MSELoss()
+    # criterion = nn.MSELoss()
+    # criterion = nn.L1Loss()
+    criterion = nn.SmoothL1Loss()
+    # criterion = nn.HuberLoss()
     optimizer = Adam(CNNLSTM.parameters(), lr=learning_rate)
 
     # Lists to store training and test losses
@@ -46,16 +53,14 @@ def main():
     model_names = ['CNNLSTM', 'CNNTransformer', 'TCN', 'CLSTM']
 
     # Train each model and store the losses
-    #train_losses[0].append(train(CNNLSTM, train_data_loader, optimizer, criterion, device, num_epochs))
-    train_losses[1].append(train(CNNTransformer, train_data_loader, optimizer, criterion, device, num_epochs))
+    train_losses[0].append(train(CNNLSTM, train_data_loader, optimizer, criterion, device, num_epochs))
+    # train_losses[1].append(train(CNNTransformer, train_data_loader, optimizer, criterion, device, num_epochs))
     #train_losses[2].append(train(TCN, train_data_loader, optimizer, criterion, device, num_epochs))
-    #print("Past TCN")
     #train_losses[3].append(train(CLSTM, train_data_loader, optimizer, criterion, device, num_epochs))
-    #print("Past CLSTM")
 
     # Test each model and store the losses
     test_losses.append(test(CNNLSTM, test_data_loader, criterion, device))
-    #test_losses.append(test(CNNTransformer, test_data_loader, criterion, device))
+    # test_losses.append(test(CNNTransformer, test_data_loader, criterion, device))
     # test_losses.append(test(TCN, test_data_loader, criterion, device))
     # test_losses.append(test(CLSTM, test_data_loader, criterion, device))
 
