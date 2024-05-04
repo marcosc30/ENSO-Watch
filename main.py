@@ -13,8 +13,8 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # Hyperparameters
-    input_size = 1
-    hidden_size = 10240
+    input_size = 12
+    hidden_size = 10
     num_layers = 2
     output_size = 1
     kernel_size = 3
@@ -26,7 +26,7 @@ def main():
     CNNLSTM = WeatherForecasterCNNLSTM(input_size, hidden_size, num_layers, output_size, kernel_size, dropout).to(device)
     CNNTransformer = WeatherForecasterCNNTransformer(input_size, hidden_size, num_layers, output_size, kernel_size, dropout).to(device)
     TCN = TemporalConvNet2D(input_size, hidden_size, num_layers, output_size, kernel_size, dropout).to(device)
-    CLSTM = ConvLSTM(input_size, hidden_size, num_layers, output_size, kernel_size, dropout).to(device)
+    # CLSTM = ConvLSTM(input_size, hidden_size, num_layers, output_size, kernel_size, dropout).to(device)
 
     # Dataset
     train_dataset, test_dataset = preprocess_data()
@@ -45,21 +45,20 @@ def main():
     model_names = ['CNNLSTM', 'CNNTransformer', 'TCN', 'CLSTM']
 
     # Train and test loop
-    for epoch in range(num_epochs):
-        # Train each model and store the losses
-        train_losses[0].append(train(CNNLSTM, train_data_loader, optimizer, criterion, device))
-        train_losses[1].append(train(CNNTransformer, train_data_loader, optimizer, criterion, device))
-        train_losses[2].append(train(TCN, train_data_loader, optimizer, criterion, device))
-        train_losses[3].append(train(CLSTM, train_data_loader, optimizer, criterion, device))
+    # Train each model and store the losses
+    loss = train(CNNLSTM, train_data_loader, optimizer, criterion, device)
+    # train_losses[1].append(train(CNNTransformer, train_data_loader, optimizer, criterion, device))
+    # train_losses[2].append(train(TCN, train_data_loader, optimizer, criterion, device))
+    # train_losses[3].append(train(CLSTM, train_data_loader, optimizer, criterion, device))
 
-        # Test each model and store the losses
-        test_losses.append(test(CNNLSTM, test_data_loader, criterion, device))
-        test_losses.append(test(CNNTransformer, test_data_loader, criterion, device))
-        test_losses.append(test(TCN, test_data_loader, criterion, device))
-        test_losses.append(test(CLSTM, test_data_loader, criterion, device))
+    # Test each model and store the losses
+    # test_losses.append(test(CNNLSTM, test_data_loader, criterion, device))
+    # test_losses.append(test(CNNTransformer, test_data_loader, criterion, device))
+    # test_losses.append(test(TCN, test_data_loader, criterion, device))
+    # test_losses.append(test(CLSTM, test_data_loader, criterion, device))
 
     # Visualize the results
-    visualize_results(train_losses, test_losses, model_names, num_epochs)
+    # visualize_results(train_losses, test_losses, model_names, num_epochs)
 
 
 def train(model, dataloader, optimizer, criterion, device, num_epochs):
