@@ -20,8 +20,8 @@ selection = {
         'toa_incident_solar_radiation',
         'total_column_water_vapour'
     ],
-    "levels": [500, 700, 850],
-    "time_slice": slice('2020-01-01', '2020-3-25'),
+    "levels": [500],
+    "time_slice": slice('2016-01-01', '2017-01-01'),
     "lat_slice": slice(30,50),
     "long_slice": slice(70,90),
 }
@@ -31,6 +31,7 @@ def preprocess_data(split_percentage=0.8, batch_size=20, use_level=False,  windo
     obs_path = 'gs://weatherbench2/datasets/era5/1959-2022-6h-64x32_equiangular_conservative.zarr'
     data = xr.open_zarr(obs_path)
 
+    print("preprocessing")
     print("dataset shape: ", data.sizes)
 
     data = data[selection['variables']].sel(level=selection['levels'], time=selection['time_slice'],
@@ -132,7 +133,37 @@ def preprocess_data(split_percentage=0.8, batch_size=20, use_level=False,  windo
         # (total_samples, sequence_len, features, lat, lon)
         inputs = np.transpose(inputs, (0, 1, 4, 3, 2))
         labels = np.transpose(labels, (0, 1, 4, 3, 2))
-        
+
+    # print('BEFORE')
+    # print(inputs[0])
+    # print(labels[0])
+    # normalization
+    flattened_inputs = inputs.reshape(-1, inputs.shape[2])
+    flattened_labels = labels.reshape(-1, labels.shape[2])
+
+    inputs_mean = np.mean(flattened_inputs, axis=0).reshape(1,1,12,1,1)
+    labels_mean = np.mean(flattened_labels, axis=0).reshape(1,1,12,1,1)
+    inputs_std = np.std(flattened_inputs, axis=0).reshape(1,1,12,1,1)
+    labels_std = np.std(flattened_labels, axis=0).reshape(1,1,12,1,1)
+
+    normalized_inputs = (inputs - inputs_mean) / inputs_std 
+    normalized_labels = (labels - labels_mean) / labels_std
+
+    inputs = normalized_inputs.reshape(inputs.shape)
+    labels = normalized_labels.reshape(labels.shape)
+
+    # normalization
+    # input_mean = np.mean(inputs)
+    # input_std = np.std(inputs)
+    # label_mean = np.mean(labels)
+    # label_std = np.std(labels)
+
+    # normalized_inputs = (inputs - input_mean) / input_std
+    # normalized_labels = (labels - label_mean) / label_std
+
+    # print("NORMALIZED")
+    # print(inputs[0])
+    # print(labels[0])
 
     #split into training and testing
     training_size = math.floor(split_percentage*num_samples)
@@ -150,6 +181,9 @@ def preprocess_data(split_percentage=0.8, batch_size=20, use_level=False,  windo
     # Y: (num_samples, 1, features, lat, lon)
     train_dataset = TensorDataset(X_train, Y_train)
     test_dataset = TensorDataset(X_test, Y_test)
+
+    torch.save(train_dataset, './data/train_dataset_norm_one_year.pth')
+    torch.save(test_dataset, './data/test_dataset_norm_one_year.pth')
 
     return train_dataset, test_dataset
     

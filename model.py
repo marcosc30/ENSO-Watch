@@ -6,7 +6,7 @@ from torch.utils.data import Dataset, DataLoader
 import pandas as pd
 import numpy as np
 from S4 import S4Block
-from typing import Optional, Type
+from typing import Optional, Type, Union
 from S4reqs import StandardEncoder
 
 
@@ -164,9 +164,9 @@ class TemporalConvNet2D(nn.Module):
         return self.network(x)
     
 class WeatherForecasterCNNLSTM(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, output_size, kernel_size=3, dropout=0.2):
+    def __init__(self, grid_features, hidden_size, num_layers, output_size, kernel_size=3, dropout=0.2):
         super(WeatherForecasterCNNLSTM, self).__init__()
-        self.input_size = input_size
+        self.grid_features = grid_features
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.output_size = output_size
@@ -174,7 +174,7 @@ class WeatherForecasterCNNLSTM(nn.Module):
 
         # CNN layers
         self.cnn = nn.Sequential(
-            nn.Conv2d(input_size, hidden_size, kernel_size, padding='same'),
+            nn.Conv2d(grid_features, hidden_size, kernel_size, padding='same'),
             nn.BatchNorm2d(hidden_size),
             nn.ReLU(),
             nn.Dropout(dropout),
@@ -185,29 +185,56 @@ class WeatherForecasterCNNLSTM(nn.Module):
         )
         
         # LSTM layers
-        self.lstm = nn.LSTM(hidden_size, hidden_size, num_layers, batch_first=True, dropout=dropout)
+        # input size is number of expected features so the number of grids by the hidden_size (how many out channels from CNN)
+        self.lstm = nn.LSTM(hidden_size * 4 * 4, hidden_size, num_layers, batch_first=True, dropout=dropout)
         
         # Fully connected output layer
         self.fc = nn.Linear(hidden_size, output_size)
         
     def forward(self, x):
-        # Assume x has dimensions [batch_size, sequence_length, channels, height, width]
-        batch_size = x.shape[1]
-        grid_data_length = x.shape[2]
-        grids_x = x.shape[3]
-        grids_y = x.shape[4]
+        # # Assume x has dimensions [batch_size, sequence_length, channels, height, width]
+        # batch_size, seq_length, grid_data_length, grids_x, grids_y = x.size()
+
+        # # [seq_len, batch_size, channels, height, width]
+        # cnn_out = [self.cnn(x[:, t]) for t in range(seq_length)]
+
+        # # [batch_size, seq_len, hidden_size * 4 * 4]
+        # cnn_out = torch.stack([o.view(batch_size, -1) for o in cnn_out], dim=1)
+
+        # # [batch_size, seq_length, hidden_size * 4 * 4]
+        # lstm_out, _ = self.lstm(cnn_out)
+        
+        # # [batch_size, hidden_size]
+        # lstm_out = lstm_out[:, -1, :]
+
+        # # [batch_size, 1, grids_data_length, grids_x, grids_y]
+        # output = torch.reshape(self.fc(lstm_out), (batch_size, 1, grid_data_length, grids_x, grids_y))
+       
+        # return output
+    
+        # Assume x has dimensions [sequence_length, batch_size, channels, height, width]
+        batch_size, seq_length, grid_data_length, grids_x, grids_y = x.size()
+
+        torch.permute(x, (1, 0, 2, 3, 4))
 
         # Separate all of the grids in the sequence
         convoluted_grids = []
         for grid in x:
             # Pass through CNN layers
             convoluted_grid = self.cnn(grid)
-            convoluted_grids.append(convoluted_grid)
-        lstm_out = self.lstm(torch.stack(convoluted_grids))
+            convoluted_grids.append(convoluted_grid.flatten())
+
+        output_sequence, (final_hidden_state, final_cell_state) = self.lstm(torch.reshape(torch.stack(convoluted_grids), (batch_size, seq_length, -1)))
+        #lstm_out = self.lstm(torch.stack(convoluted_grids))
+        
+        lstm_out = output_sequence[:, -1, :]
         out = self.fc(lstm_out)
-        out.reshape(batch_size, grid_data_length, grids_x, grids_y)
+        out = torch.reshape(out, (batch_size, 1, grid_data_length, grids_x, grids_y))
 
         return out
+    
+
+
 
 class WeatherForecasterCNNTransformer(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers, output_size, kernel_size=3, dropout=0.2):
@@ -230,40 +257,57 @@ class WeatherForecasterCNNTransformer(nn.Module):
             nn.Dropout(dropout)
         )
 
-        # Resizing layer to match transformer's expected embedding dimension
-        self.resize = nn.Linear(1638400, 10240)  
-
         # Transformer layer
-        self.transformer_encoder_layer = nn.TransformerEncoderLayer(d_model=10240, nhead=8)
+        self.transformer_encoder_layer = nn.TransformerEncoderLayer(d_model=hidden_size * 4 * 4, nhead=8)
         self.transformer = nn.TransformerEncoder(self.transformer_encoder_layer, num_layers=num_layers)
 
         # Fully connected output layer
-        self.fc = nn.Linear(10240, output_size)
+        self.fc = nn.Linear(hidden_size*4*4, output_size)
 
     def forward(self, x):
-        # Assume x has dimensions [batch_size, channels, height, width]
-        batch_size = x.size(0)
+        # # x : [batch_size, seq_length, grid_data_length, grids_x, grids_y]
+        # batch_size, seq_length, grid_data_length, grids_x, grids_y = x.size()
 
-        # Apply CNN layers
-        x = self.cnn(x)  # Output shape [batch_size, hidden_size, new_height, new_width]
-        x = x.view(batch_size, -1)  # Flatten the output
+        # # [seq_len, batch_size, channels, height, width]
+        # cnn_out = [self.cnn(x[:, t]) for t in range(seq_length)] 
 
-        # Resize to correct transformer input dimension
-        x = self.resize(x)  # Resize or project the flattened features to the embedding size
+        # # [batch_size, seq_len, hidden_size * 4 * 4]
+        # cnn_out = torch.stack([o.view(batch_size, -1) for o in cnn_out], dim=1)
 
-        # Prepare for transformer (add sequence length dimension)
-        x = x.unsqueeze(1)  # Transformer expects [batch_size, seq_len, features]
+        # # [seq_len, batch_size, hidden_size * 4 * 4]
+        # cnn_out = cnn_out.permute(1,0,2)
 
-        # Apply Transformer
-        x = self.transformer(x)
+        # # [batch_size, hidden_size]
+        # transformer_out = self.transformer(cnn_out)
+        # transformer_out = transformer_out[-1]
 
-        # Reshape and apply final fully connected layer
-        x = x.view(batch_size, -1)  # Flatten the output of transformer
-        x = self.fc(x)
+        # # [batch_size, 1, grids_data_length, grids_x, grids_y]
+        # output = torch.reshape(self.fc(transformer_out), (batch_size, 1, grid_data_length, grids_x, grids_y))
 
-        return x
+        # return output
 
-def _parse_pool_kernel(pool_kernel: Optional[int | tuple[int]]) -> int:
+
+        batch_size, seq_length, grid_data_length, grids_x, grids_y = x.size()
+
+        torch.permute(x, (1, 0, 2, 3, 4))
+
+        # Separate all of the grids in the sequence
+        convoluted_grids = []
+        for grid in x:
+            # Pass through CNN layers
+            convoluted_grid = self.cnn(grid)
+            convoluted_grids.append(convoluted_grid.flatten())
+
+        CNN_out = torch.reshape(torch.stack(convoluted_grids), (batch_size, seq_length, -1)).permute(1,0,2)
+        transformer_out = self.transformer(CNN_out)
+        transformer_out = transformer_out[-1]
+        
+        out = self.fc(transformer_out)
+        out = torch.reshape(out, (batch_size, 1, grid_data_length, grids_x, grids_y))
+
+        return out
+
+def _parse_pool_kernel(pool_kernel: Optional[Union[int, tuple[int]]]) -> int:
     if pool_kernel is None:
         return 1
     elif isinstance(pool_kernel, tuple):
@@ -277,7 +321,7 @@ def _parse_pool_kernel(pool_kernel: Optional[int | tuple[int]]) -> int:
 def _seq_length_schedule(
     n_blocks: int,
     l_max: int,
-    pool_kernel: Optional[int | tuple[int]],
+    pool_kernel: Optional[Union[int, tuple[int]]],
 ) -> list[tuple[int, int]]:
     ppk = _parse_pool_kernel(pool_kernel)
 
@@ -334,7 +378,7 @@ class WeatherForecasterS4(nn.Module):
         activation: Type[nn.Module] = nn.GELU,
         norm_type: Optional[str] = "layer",
         norm_strategy: str = "post",
-        pooling: Optional[nn.AvgPool1d | nn.MaxPool1d] = None,
+        pooling: Optional[Union[nn.AvgPool1d, nn.MaxPool1d]] = None,
         kernel_size=3
     ) -> None:
         super().__init__()
