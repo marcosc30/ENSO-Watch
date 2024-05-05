@@ -179,7 +179,6 @@ class WeatherForecasterCNNLSTM(nn.Module):
         )
         
         # LSTM layers
-        # input size is number of expected features so the number of grids by the hidden_size (how many out channels from CNN)
         self.lstm = nn.LSTM(hidden_size * 4 * 4, hidden_size, num_layers, batch_first=True, dropout=dropout)
         
         # Fully connected output layer

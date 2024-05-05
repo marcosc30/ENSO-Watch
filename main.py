@@ -79,12 +79,12 @@ def train(model, dataloader, optimizer, criterion, device, num_epochs):
         for inputs, labels in progress_bar:
             inputs, labels = inputs.to(device), labels.to(device)
             optimizer.zero_grad()
-            # outputs = model(inputs)
             outputs, _ = model(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
             running_loss += loss.item()
+            # progress bar to see the loss as the model trains
             progress_bar.set_postfix({'loss': f'{running_loss / len(dataloader):.4f}'})
         print(f"Epoch {epoch+1}/{num_epochs}, Loss: {running_loss/len(dataloader):.4f}")
         losses.append(running_loss/len(dataloader))

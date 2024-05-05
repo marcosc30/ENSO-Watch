@@ -36,8 +36,6 @@ def preprocess_data(split_percentage=0.8, batch_size=20, use_level=False,  windo
 
     data = data[selection['variables']].sel(level=selection['levels'], time=selection['time_slice'],
                                             latitude=selection['lat_slice'], longitude=selection['long_slice'])
-    # data = data[selection['variables']].sel(level=selection['levels'],
-    #                                     latitude=selection['lat_slice'], longitude=selection['long_slice'])
 
     time_size = data.sizes['time']
     level_size = data.sizes['level']
@@ -93,51 +91,16 @@ def preprocess_data(split_percentage=0.8, batch_size=20, use_level=False,  windo
 
 
     num_samples = len(inputs)
-    # num_batches = num_samples // batch_size
-    # sequence_len = len(default_intervals) - 1
-    
-    # inputs_truncated = inputs[:total_samples - total_samples % batch_size]
-    # labels_truncated = labels[:total_samples - total_samples % batch_size]
     
     if use_level:
-        # # (total_samples, sequence_len, level, lon, lat, features)
-        # new_inputs_shape = (num_batches, batch_size, sequence_len, level_size, lon_size, lat_size, feature_size)
-        # new_labels_shape = (num_batches, batch_size, 1, level_size, lon_size, lat_size, feature_size)
-        
-        # # (num_batches, batch_size, sequence_len, level, lon, lat, features)
-        # inputs = inputs_truncated.reshape(new_inputs_shape)
-        # labels = labels_truncated.reshape(new_labels_shape)
-
-        # # (num_batches, sequence_len, batch_size, features, lat, lon, level)
-        # inputs = np.transpose(inputs, (0, 2, 1, 6, 5, 4, 3))
-        # labels = np.transpose(labels, (0, 2, 1, 6, 5, 4, 3))
-
-        # (total_samples, sequence_len, features, lat, lon, level)
         inputs = np.transpose(inputs, (0, 1, 5, 4, 3, 2))
         labels = np.transpose(labels, (0, 1, 5, 4, 3, 2))
 
 
     else:
-        # # (total_samples, sequence_len, lon, lat, features)
-        # new_inputs_shape = (num_batches, batch_size, sequence_len, lon_size, lat_size, feature_size)
-        # new_labels_shape = (num_batches, batch_size, 1, lon_size, lat_size, feature_size)
-        
-        # # (num_batches, batch_size, sequence_len, lon, lat, features)
-        # inputs = inputs_truncated.reshape(new_inputs_shape)
-        # labels = labels_truncated.reshape(new_labels_shape)
-    
-        # # (num_batches, sequence_len, batch_size, features, lat, lon)
-        # inputs = np.transpose(inputs, (0, 2, 1, 5, 4, 3))
-        # labels = np.transpose(labels, (0, 2, 1, 5, 4, 3))
-
-        # (total_samples, sequence_len, features, lat, lon)
         inputs = np.transpose(inputs, (0, 1, 4, 3, 2))
         labels = np.transpose(labels, (0, 1, 4, 3, 2))
 
-    # print('BEFORE')
-    # print(inputs[0])
-    # print(labels[0])
-    # normalization
     flattened_inputs = inputs.reshape(-1, inputs.shape[2])
     flattened_labels = labels.reshape(-1, labels.shape[2])
 
@@ -152,30 +115,12 @@ def preprocess_data(split_percentage=0.8, batch_size=20, use_level=False,  windo
     inputs = normalized_inputs.reshape(inputs.shape)
     labels = normalized_labels.reshape(labels.shape)
 
-    # normalization
-    # input_mean = np.mean(inputs)
-    # input_std = np.std(inputs)
-    # label_mean = np.mean(labels)
-    # label_std = np.std(labels)
-
-    # normalized_inputs = (inputs - input_mean) / input_std
-    # normalized_labels = (labels - label_mean) / label_std
-
-    # print("NORMALIZED")
-    # print(inputs[0])
-    # print(labels[0])
-
     #split into training and testing
     training_size = math.floor(split_percentage*num_samples)
     X_train = torch.tensor(inputs[0:training_size], dtype=torch.float32)
     X_test = torch.tensor(inputs[training_size::], dtype=torch.float32)
     Y_train = torch.tensor(labels[0:training_size], dtype=torch.float32)
     Y_test = torch.tensor(labels[training_size::], dtype=torch.float32)
-
-    # print("x train:", X_train.shape)
-    # print("x test:", X_test.shape)
-    # print("y train:", Y_train.shape)
-    # print("y test:", Y_test.shape)
 
     # X: (num_samples, sequence_len, features, lat, lon)
     # Y: (num_samples, 1, features, lat, lon)
@@ -186,7 +131,6 @@ def preprocess_data(split_percentage=0.8, batch_size=20, use_level=False,  windo
     torch.save(test_dataset, './data/test_dataset_norm_one_year.pth')
 
     return train_dataset, test_dataset
-    
 
     # np.save('../data/test_data_array.npy', dataset)
 

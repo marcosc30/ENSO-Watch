@@ -26,7 +26,6 @@ def _make_omega_l(l_max: int, dtype: torch.dtype = torch.complex64) -> torch.Ten
     #Omega buffer used to obtain K
     return torch.arange(l_max).type(dtype).mul(2j * np.pi / l_max).exp()
 
-
 def _make_hippo(N: int) -> np.ndarray:
     # Make Hippo matrix, which is used to compute the roots of the polynomial
     def idx2value(n: int, k: int) -> Union[int, float]:
@@ -55,7 +54,6 @@ def _make_nplr_hippo(N: int) -> tuple[np.ndarray, ...]:
     lambda_, V = np.linalg.eig(S)
     return lambda_, p, q, V
 
-
 def _make_p_q_lambda(n: int) -> list[torch.Tensor]:
     # Make p, q, and lambda
     lambda_, p, q, V = _make_nplr_hippo(n)
@@ -63,7 +61,6 @@ def _make_p_q_lambda(n: int) -> list[torch.Tensor]:
     p = Vc @ p
     q = Vc @ q.conj()
     return [torch.from_numpy(i) for i in (p, q, lambda_)]
-
 
 def _cauchy_dot(v: torch.Tensor, denominator: torch.Tensor) -> torch.Tensor:
     # Calculates the cauchy dot product
@@ -75,15 +72,12 @@ def _cauchy_dot(v: torch.Tensor, denominator: torch.Tensor) -> torch.Tensor:
         raise IndexError(f"Expected `v` to be 1D, 2D or 3D, got {v.ndim}D")
     return (v / denominator).sum(dim=-1)
 
-
 def _non_circular_convolution(u: torch.Tensor, K: torch.Tensor) -> torch.Tensor:
     # Non-circular convolution
     l_max = u.shape[1]
     ud = rfft(F.pad(u.float(), pad=(0, 0, 0, l_max, 0, 0)), dim=1)
     Kd = rfft(F.pad(K.float(), pad=(0, l_max)), dim=-1)
     return irfft(ud.transpose(-2, -1) * Kd)[..., :l_max].transpose(-2, -1).type_as(u)
-
-
 class S4Layer(nn.Module):
     """S4 Layer.
 
@@ -192,9 +186,6 @@ class S4Layer(nn.Module):
 
         """
         return _non_circular_convolution(u, K=self.K) + (self.D * u)
-
-
-
 
 # S4 Block:
 
