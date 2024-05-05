@@ -221,30 +221,6 @@ class WeatherForecasterCNNLSTM(nn.Module):
        
         return output
 
-        # x = torch.permute(x, (1,0,2,3,4))
-
-        # # Separate all of the grids in the sequence
-        # convoluted_grids = []
-        # for grid in x:
-        #     # Pass through CNN layers
-        #     convoluted_grid = self.cnn(grid)
-        #     convoluted_grids.append(convoluted_grid)
-
-        # # [batch_size, seq_length, grid_data_length * grids_x * grids_y]
-        # lstm_in = torch.reshape(torch.stack(convoluted_grids), (batch_size, seq_length, -1))
-
-        # # [batch_size, seq_length, hidden_size]
-        # lstm_out, _ = self.lstm(lstm_in)
-
-        # # [batch_size, hidden_size]
-        # lstm_out = lstm_out[:, -1, :]
-
-        # # [batch_size, output_size]
-        # out = self.fc(lstm_out)
-        # out = torch.reshape(out, (batch_size, 1, grid_data_length, grids_x, grids_y))
-
-        # # [batch_size, 1, grids_data_length, grids_x, grids_y]
-        # return out
 
 class WeatherForecasterCNNTransformer(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers, output_size, kernel_size=3, dropout=0.2):
