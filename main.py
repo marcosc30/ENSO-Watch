@@ -25,16 +25,12 @@ def main():
     num_epochs = 2
     num_features = 12
 
-    # Make each of the 4 models
-    CNNLSTM = WeatherForecasterCNNLSTM(num_features, hidden_size_cnnlstm, num_layers, output_size, kernel_size, dropout).to(device)
-    CNNTransformer = WeatherForecasterCNNTransformer(num_features, hidden_size_cnntransformer, num_layers, output_size, kernel_size, dropout).to(device)
-    #TCN = TemporalConvNet2D(input_size, num_features, kernel_size, dropout) #(input_size, hidden_size, num_layers, output_size, kernel_size, dropout).to(device)
-    #CLSTM = ConvLSTM(input_size, hidden_size, num_layers, output_size, kernel_size, dropout).to(device)
+
 
     # Dataset
     # train_dataset, test_dataset = preprocess_data()
-    train_dataset = torch.load('./data/train_dataset_norm_one_year.pth')
-    test_dataset = torch.load('./data/test_dataset_norm_one_year.pth')
+    train_dataset = torch.load('./data/train_dataset_norm_simple.pth')
+    test_dataset = torch.load('./data/test_dataset_norm_simple.pth')
 
     # Dataloader
     train_data_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
@@ -45,27 +41,33 @@ def main():
     # criterion = nn.L1Loss()
     # criterion = nn.SmoothL1Loss()
     # criterion = nn.HuberLoss()
-    cnnlstm_optimizer = Adam(CNNLSTM.parameters(), lr=learning_rate)
-    cnntransformer_optimizer = Adam(CNNTransformer.parameters(), lr=learning_rate)
-    # tcn_optimizer = Adam(TCN.parameters(), lr=learning_rate)
-    # clstm_optimizer = Adam(CLSTM.parameters(), lr=learning_rate)
-
+    
     # Lists to store training and test losses
     train_losses = [] 
     test_losses = [0, 0, 0, 0]
     model_names = ['CNNLSTM', 'CNNTransformer', 'TCN', 'CLSTM']
 
-    # Train each model and store the losses
-    train_losses.append(train(CNNLSTM, train_data_loader, cnnlstm_optimizer, criterion, device, num_epochs))
-    train_losses.append(train(CNNTransformer, train_data_loader, cnntransformer_optimizer, criterion, device, num_epochs))
-    #train_losses.append(train(TCN, train_data_loader, tcn_optimizer, criterion, device, num_epochs))
-    #train_losses.append(train(CLSTM, train_data_loader, clstm_optimizer, criterion, device, num_epochs))
+    ## For each model: Instantiate, define optimizer, train, test loss
 
-    # Test each model and store the losses
-    test_losses[0] = test(CNNLSTM, test_data_loader, criterion, device)
-    test_losses[1] = test(CNNTransformer, test_data_loader, criterion, device)
+    # CNNLSTM = WeatherForecasterCNNLSTM(num_features, hidden_size_cnnlstm, num_layers, output_size, kernel_size, dropout).to(device)
+    # cnnlstm_optimizer = Adam(CNNLSTM.parameters(), lr=learning_rate)
+    # train_losses.append(train(CNNLSTM, train_data_loader, cnnlstm_optimizer, criterion, device, num_epochs))
+    # test_losses[0] = test(CNNLSTM, test_data_loader, criterion, device)
+
+    # CNNTransformer = WeatherForecasterCNNTransformer(num_features, hidden_size_cnntransformer, num_layers, output_size, kernel_size, dropout).to(device)
+    # cnntransformer_optimizer = Adam(CNNTransformer.parameters(), lr=learning_rate)
+    # train_losses.append(train(CNNTransformer, train_data_loader, cnntransformer_optimizer, criterion, device, num_epochs))
+    # test_losses[1] = test(CNNTransformer, test_data_loader, criterion, device)
+
+    # TCN = TemporalConvNet2D(input_size, num_features, kernel_size, dropout)
+    # tcn_optimizer = Adam(TCN.parameters(), lr=learning_rate)
+    # train_losses.append(train(TCN, train_data_loader, tcn_optimizer, criterion, device, num_epochs))
     # test_losses[2] = test(TCN, test_data_loader, criterion, device)
-    # test_losses[3] = test(CLSTM, test_data_loader, criterion, device)
+
+    CLSTM = ConvLSTM(num_features, 120, kernel_size, num_layers).to(device)
+    clstm_optimizer = Adam(CLSTM.parameters(), lr=learning_rate)
+    train_losses.append(train(CLSTM, train_data_loader, clstm_optimizer, criterion, device, num_epochs))
+    test_losses[3] = test(CLSTM, test_data_loader, criterion, device)
 
     # Visualize the results
     visualize_results(train_losses, test_losses, model_names, num_epochs)
@@ -80,7 +82,8 @@ def train(model, dataloader, optimizer, criterion, device, num_epochs):
         for inputs, labels in progress_bar:
             inputs, labels = inputs.to(device), labels.to(device)
             optimizer.zero_grad()
-            outputs = model(inputs)
+            # outputs = model(inputs)
+            outputs, _ = model(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
