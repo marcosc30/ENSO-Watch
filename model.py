@@ -30,6 +30,11 @@ class ConvLSTMCell(nn.Module):
     def forward(self, input, prev_state):
         h_prev, c_prev = prev_state
 
+        # Ensure both input and previous states are on the same device
+        device = input.device
+        h_prev = h_prev.to(device)
+        c_prev = c_prev.to(device)
+
         # Concatenate along the channel axis
         combined = torch.cat((input, h_prev), dim=1)
         combined_conv = self.conv(combined)
@@ -68,13 +73,24 @@ class ConvLSTM(nn.Module):
         self.fc = nn.Linear(1920, 12 * 4 * 4)
 
     def forward(self, input, prev_state=None):
+        # Retrieve the device of the input tensor
+        device = input.device
+
         batch_size, seq_len, channels, height, width = input.size()
         if prev_state is None:
+            # Initialize the previous states on the same device as the input
             prev_state = [
-                (torch.zeros(batch_size, self.hidden_size, height, width),
-                 torch.zeros(batch_size, self.hidden_size, height, width))
+                (torch.zeros(batch_size, self.hidden_size, height, width, device=device),
+                 torch.zeros(batch_size, self.hidden_size, height, width, device=device))
                 for _ in range(self.num_layers)
             ]
+        else:
+            # Ensure all previous states are on the input device
+            prev_state = [
+                (h_prev.to(device), c_prev.to(device))
+                for h_prev, c_prev in prev_state
+            ]
+
         next_state = prev_state
         for t in range(seq_len):
             x_t = input[:, t]  # [batch_size, channels, height, width]
@@ -83,12 +99,13 @@ class ConvLSTM(nn.Module):
                 h_next, c_next = cell(x_t, (h_prev, c_prev))
                 next_state[i] = (h_next, c_next)
                 x_t = h_next  # Pass to the next layer
+
         # Use the final state of the last layer as output
         final_output = next_state[-1][0]  # Final hidden state
         out = self.fc(final_output.view(batch_size, -1))
         out = out.view(batch_size, 1, channels, height, width)
         return out, next_state
- 
+
 class TemporalBlock2D(nn.Module):
     def __init__(self, n_inputs, n_outputs, kernel_size, stride, dilation, padding, dropout=0.2):
         super(TemporalBlock2D, self).__init__()
