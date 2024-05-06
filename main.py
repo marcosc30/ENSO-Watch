@@ -64,10 +64,10 @@ def main():
     # train_losses.append(train(TCN, train_data_loader, tcn_optimizer, criterion, device, num_epochs))
     # test_losses[2] = test(TCN, test_data_loader, criterion, device)
 
-    CLSTM = ConvLSTM(num_features, 120, kernel_size, num_layers).to(device)
-    clstm_optimizer = Adam(CLSTM.parameters(), lr=learning_rate)
-    train_losses.append(train(CLSTM, train_data_loader, clstm_optimizer, criterion, device, num_epochs))
-    test_losses[3] = test(CLSTM, test_data_loader, criterion, device)
+    # CLSTM = ConvLSTM(num_features, 120, kernel_size, num_layers).to(device)
+    # clstm_optimizer = Adam(CLSTM.parameters(), lr=learning_rate)
+    # train_losses.append(train(CLSTM, train_data_loader, clstm_optimizer, criterion, device, num_epochs))
+    # test_losses[3] = test(CLSTM, test_data_loader, criterion, device)
 
     # Visualize the results
     visualize_results(train_losses, test_losses, model_names, num_epochs)
@@ -82,8 +82,8 @@ def train(model, dataloader, optimizer, criterion, device, num_epochs):
         for inputs, labels in progress_bar:
             inputs, labels = inputs.to(device), labels.to(device)
             optimizer.zero_grad()
-            # outputs = model(inputs)
-            outputs, _ = model(inputs)
+            outputs = model(inputs)
+            # outputs, _ = model(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
@@ -96,13 +96,33 @@ def train(model, dataloader, optimizer, criterion, device, num_epochs):
 def test(model, dataloader, criterion, device):
     model.eval()
     running_loss = 0.0
+    num_correct, total_samples = 0, 0
     with torch.no_grad():
         for inputs, labels in dataloader:
             inputs, labels = inputs.to(device), labels.to(device)
-            outputs = model(inputs)
+            outputs = model(inputs)  
             loss = criterion(outputs, labels)
             running_loss += loss.item()
+            num_correct += accuracy_within_tolerance(outputs, labels)
+            total_samples += len(inputs)
+    accuracy = (num_correct / total_samples).item()
+
+    print('Test Accuracy: ', accuracy)
     return running_loss / len(dataloader)
+
+
+def accuracy_within_tolerance(predictions, labels, tolerance=0.5, required_fraction=0.8):
+    batch_size, _, num_features, height, width = predictions.shape
+    
+    differences = torch.abs(predictions - labels)
+    within_tolerance = differences < tolerance
+    
+    num_elements = num_features * height * width
+    fractions_within_tolerance = torch.sum(within_tolerance, axis=(1, 2, 3, 4)) / num_elements
+    
+    count = torch.sum(fractions_within_tolerance >= required_fraction)
+    
+    return count
 
 if __name__ == "__main__":
     main()
