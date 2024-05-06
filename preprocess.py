@@ -115,6 +115,14 @@ def preprocess_data(split_percentage=0.8, batch_size=20, use_level=False,  windo
     inputs = normalized_inputs.reshape(inputs.shape)
     labels = normalized_labels.reshape(labels.shape)
 
+    #keep a copy of original data before splitting and shuffling for sequence prediction testing
+    original_inputs = torch.tensor(inputs.copy())
+    original_labels = torch.tensor(labels.copy())
+
+    #shuffle
+    inputs = inputs[torch.randperm(len(inputs), axis=0)]
+    labels = inputs[torch.randperm(len(labels), axis=0)]
+
     #split into training and testing
     training_size = math.floor(split_percentage*num_samples)
     X_train = torch.tensor(inputs[0:training_size], dtype=torch.float32)
@@ -126,9 +134,12 @@ def preprocess_data(split_percentage=0.8, batch_size=20, use_level=False,  windo
     # Y: (num_samples, 1, features, lat, lon)
     train_dataset = TensorDataset(X_train, Y_train)
     test_dataset = TensorDataset(X_test, Y_test)
+    original_dataset = TensorDataset(original_inputs, original_labels)
 
-    torch.save(train_dataset, './data/train_dataset_norm_one_year.pth')
-    torch.save(test_dataset, './data/test_dataset_norm_one_year.pth')
+
+    torch.save(train_dataset, './data/train_dataset_norm_simple.pth')
+    torch.save(test_dataset, './data/test_dataset_norm_simple.pth')
+    torch.save(original_dataset, './data/original_dataset_norm_simple.pth')
 
     return train_dataset, test_dataset
 
