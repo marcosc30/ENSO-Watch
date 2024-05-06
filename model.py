@@ -106,15 +106,15 @@ class TemporalBlock2D(nn.Module):
         # Convolutional layer with weight normalization
         self.conv2 = weight_norm(nn.Conv2d(n_outputs, n_outputs, kernel_size,
                                            stride=stride, padding=padding, dilation=dilation))
-        
+
         # Sequential network
         self.net = nn.Sequential(self.conv1, self.relu, self.dropout,
                                  self.conv2, self.relu, self.dropout)
-        
+
         # Downsample layer
         self.downsample = nn.Conv2d(
             n_inputs, n_outputs, kernel_size=1, stride=stride) if n_inputs != n_outputs else None
-        
+
         self.relu = nn.ReLU()
 
         # Initialize weights
@@ -138,25 +138,37 @@ class TemporalConvNet2D(nn.Module):
     def __init__(self, num_inputs, num_channels, kernel_size=3, dropout=0.2):
         super(TemporalConvNet2D, self).__init__()
         layers = []
-        num_levels = len(num_channels)
+        num_levels = num_channels
 
+        
         # Create a series of TemporalBlock2D layers
         for i in range(num_levels):
             # Calculate the dilation size
             dilation_size = 2 ** i
             # Create a TemporalBlock2D layer
-            in_channels = num_inputs if i == 0 else num_channels[i-1]
-            out_channels = num_channels[i]
+            in_channels = num_inputs if i == 0 else num_channels
+            out_channels = num_channels
             # Append the TemporalBlock2D layer to the list of layers
             layers += [TemporalBlock2D(in_channels, out_channels, kernel_size, stride=1, dilation=dilation_size,
-                                       padding=((kernel_size-1) * dilation_size, 0), dropout=dropout)]
-            
+                                       padding=(kernel_size // 2) * dilation_size, dropout=dropout)]
+
         # Create a sequential network
         self.network = nn.Sequential(*layers)
 
     def forward(self, x):
-        return self.network(x)
-    
+        num_samples, seq_length, num_features, lat_size, lon_size = x.size()
+        x = x.permute(1, 0, 2, 3, 4)
+
+        convoluted_grids = []
+        for grid in x:
+            convoluted_grid = self.network(grid)
+            # Flatten only the feature dimension, not the spatial dimensions
+            convoluted_grids.append(convoluted_grid.view(convoluted_grid.size(0), -1, lat_size, lon_size))
+
+        # Stack along the sequence dimension and then swap dimensions to [batch_size, sequence, features, lat, lon]
+        output = torch.stack(convoluted_grids, dim=0).permute(1, 0, 2, 3, 4)  # [seq_length, batch_size, channels, lat, lon] -> [batch_size, seq_length, channels, lat, lon]
+        return output
+
 class WeatherForecasterCNNLSTM(nn.Module):
     def __init__(self, grid_features, hidden_size, num_layers, output_size, kernel_size=3, dropout=0.2):
         super(WeatherForecasterCNNLSTM, self).__init__()
