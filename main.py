@@ -101,5 +101,39 @@ def test(model, dataloader, criterion, device):
             running_loss += loss.item()
     return running_loss / len(dataloader)
 
+def predict_sequence(num_steps: int, model, data_index):
+    # Assume data has dimensions [batch_size, sequence_length, channels, height, width]
+    original_dataset = torch.load('./data/original_dataset_norm_simple.pth')
+    if data_index < 120 or data_index >= len(original_dataset) - 120:
+        return None
+    # The idea here is to predict for one input, put the prediction into the data as if it was the next data point, then predict again for num_steps
+    produced_outputs = []
+    corresponding_labels = []
+    for step in range(num_steps):
+        index = data_index + step
+        default_intervals = [-120, -56, -28, -12, -8, -4, -3, -2, -1, 0, 4]
+        for i in default_intervals:
+            i += index
+        model.eval()
+        with torch.no_grad():
+            output = model(original_dataset[default_intervals])
+            produced_outputs.append(output)
+            corresponding_labels.append(original_dataset[index])
+            original_dataset[index] = output
+    return produced_outputs, corresponding_labels
+
+def sequence_prediction_accuracy(num_steps: int, model):
+    # Assume data has dimensions [batch_size, sequence_length, channels, height, width]
+    original_dataset = torch.load('./data/original_dataset_norm_simple.pth')
+    model.eval()
+    accuracies = []
+    for index in range(120, len(original_dataset) - 120):
+        produced_outputs, corresponding_labels = predict_sequence(num_steps, model, index)
+        if produced_outputs is not None:
+            # Calculate accuracy
+            accuracy = 0
+            accuracies.append(accuracy)
+    return sum(accuracies) / len(accuracies)   
+
 if __name__ == "__main__":
     main()
