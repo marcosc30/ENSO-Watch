@@ -7,7 +7,7 @@ def plot_training_loss(train_losses, model_names, epochs):
     Args:
         train_losses (list): A list of training loss lists for each model.
         model_names (list): A list of strings representing the model names.
-        epochs (int): The number of epochs.
+        epochs (int): The number of epochs
     """
     plt.figure(figsize=(10, 6))
     for i, loss in enumerate(train_losses):

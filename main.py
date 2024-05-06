@@ -15,7 +15,8 @@ def main():
     input_size = 1
     hidden_size_cnnlstm = 64
     hidden_size_cnntransformer = 120
-    hidden_size_tcn = 64
+    hidden_size_tcn = 64  # Added hidden_size for TCN
+    num_channels = [hidden_size_tcn] * num_layers  # Assuming the same number of channels for each layer
     hidden_size_clstm = 64
     num_layers = 2
     output_size = 12 * 4 * 4
@@ -25,10 +26,13 @@ def main():
     num_epochs = 2
     num_features = 12
 
-
+    # Make each of the 4 models
+    CNNLSTM = WeatherForecasterCNNLSTM(num_features, hidden_size_cnnlstm, num_layers, output_size, kernel_size, dropout).to(device)
+    CNNTransformer = WeatherForecasterCNNTransformer(num_features, hidden_size_cnntransformer, num_layers, output_size, kernel_size, dropout).to(device)
+    TCN = TemporalConvNet2D(input_size, num_channels, kernel_size, dropout).to(device)  # Initialized TCN with correct parameters
+    CLSTM = ConvLSTM(num_features, 120, kernel_size, num_layers).to(device)
 
     # Dataset
-    # train_dataset, test_dataset = preprocess_data()
     train_dataset = torch.load('./data/train_dataset_norm_simple.pth')
     test_dataset = torch.load('./data/test_dataset_norm_simple.pth')
 
@@ -38,12 +42,15 @@ def main():
 
     # Loss and optimizers for each model
     criterion = nn.MSELoss()
-    # criterion = nn.L1Loss()
-    # criterion = nn.SmoothL1Loss()
-    # criterion = nn.HuberLoss()
-    
+
+    # Define optimizers for each model
+    cnnlstm_optimizer = Adam(CNNLSTM.parameters(), lr=learning_rate)
+    cnntransformer_optimizer = Adam(CNNTransformer.parameters(), lr=learning_rate)
+    tcn_optimizer = Adam(TCN.parameters(), lr=learning_rate)  # Added optimizer for TCN
+    clstm_optimizer = Adam(CLSTM.parameters(), lr=learning_rate)
+
     # Lists to store training and test losses
-    train_losses = [] 
+    train_losses = []
     test_losses = [0, 0, 0, 0]
     model_names = ['CNNLSTM', 'CNNTransformer', 'TCN', 'CLSTM']
 
@@ -82,12 +89,12 @@ def train(model, dataloader, optimizer, criterion, device, num_epochs):
         for inputs, labels in progress_bar:
             inputs, labels = inputs.to(device), labels.to(device)
             optimizer.zero_grad()
-            outputs = model(inputs)
-            # outputs, _ = model(inputs)
+            outputs, _ = model(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
             running_loss += loss.item()
+            # progress bar to see the loss as the model trains
             progress_bar.set_postfix({'loss': f'{running_loss / len(dataloader):.4f}'})
         print(f"Epoch {epoch+1}/{num_epochs}, Loss: {running_loss/len(dataloader):.4f}")
         losses.append(running_loss/len(dataloader))
@@ -109,6 +116,40 @@ def test(model, dataloader, criterion, device):
 
     print('Test Accuracy: ', accuracy)
     return running_loss / len(dataloader)
+
+def predict_sequence(num_steps: int, model, data_index):
+    # Assume data has dimensions [batch_size, sequence_length, channels, height, width]
+    original_dataset = torch.load('./data/original_dataset_norm_simple.pth')
+    if data_index < 120 or data_index >= len(original_dataset) - 120:
+        return None
+    # The idea here is to predict for one input, put the prediction into the data as if it was the next data point, then predict again for num_steps
+    produced_outputs = []
+    corresponding_labels = []
+    for step in range(num_steps):
+        index = data_index + step
+        default_intervals = [-120, -56, -28, -12, -8, -4, -3, -2, -1, 0, 4]
+        for i in default_intervals:
+            i += index
+        model.eval()
+        with torch.no_grad():
+            output = model(original_dataset[default_intervals])
+            produced_outputs.append(output)
+            corresponding_labels.append(original_dataset[index])
+            original_dataset[index] = output
+    return produced_outputs, corresponding_labels
+
+def sequence_prediction_accuracy(num_steps: int, model):
+    # Assume data has dimensions [batch_size, sequence_length, channels, height, width]
+    original_dataset = torch.load('./data/original_dataset_norm_simple.pth')
+    model.eval()
+    accuracies = []
+    for index in range(120, len(original_dataset) - 120):
+        produced_outputs, corresponding_labels = predict_sequence(num_steps, model, index)
+        if produced_outputs is not None:
+            # Calculate accuracy
+            accuracy = 0
+            accuracies.append(accuracy)
+    return sum(accuracies) / len(accuracies)   
 
 
 def accuracy_within_tolerance(predictions, labels, tolerance=0.5, required_fraction=0.8):
