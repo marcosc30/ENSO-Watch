@@ -27,9 +27,9 @@ def main():
 
 
     # Make each of the 4 models
-    # CNNLSTM = WeatherForecasterCNNLSTM(num_features, hidden_size_cnnlstm, num_layers, output_size, kernel_size, dropout).to(device)
-    # CNNTransformer = WeatherForecasterCNNTransformer(num_features, hidden_size_cnntransformer, num_layers, output_size, kernel_size, dropout).to(device)
-    # TCN = TemporalConvNet2D(input_size, num_channels, kernel_size, dropout).to(device)  # Initialized TCN with correct parameters
+    CNNLSTM = WeatherForecasterCNNLSTM(num_features, hidden_size_cnnlstm, num_layers, output_size, kernel_size, dropout).to(device)
+    CNNTransformer = WeatherForecasterCNNTransformer(num_features, hidden_size_cnntransformer, num_layers, output_size, kernel_size, dropout).to(device)
+    TCN = TemporalConvNet2D(12, num_features, kernel_size, dropout).to(device)
     CLSTM = ConvLSTM(num_features, 120, kernel_size, num_layers).to(device)
 
     # Dataset
