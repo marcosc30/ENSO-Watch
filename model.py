@@ -5,9 +5,7 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 import pandas as pd
 import numpy as np
-from S4 import S4Block
 from typing import Optional, Type, Union
-from S4reqs import StandardEncoder
 
 
 class ConvLSTMCell(nn.Module):
