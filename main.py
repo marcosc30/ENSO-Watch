@@ -43,12 +43,6 @@ def main():
     # Loss and optimizers for each model
     criterion = nn.MSELoss()
 
-    # Define optimizers for each model
-    # cnnlstm_optimizer = Adam(CNNLSTM.parameters(), lr=learning_rate)
-    # cnntransformer_optimizer = Adam(CNNTransformer.parameters(), lr=learning_rate)
-    # tcn_optimizer = Adam(TCN.parameters(), lr=learning_rate)  # Added optimizer for TCN
-    clstm_optimizer = Adam(CLSTM.parameters(), lr=learning_rate)
-
     # Lists to store training and test losses
     train_losses = []
     test_losses = [0, 0, 0, 0]
@@ -66,15 +60,15 @@ def main():
     # train_losses.append(train(CNNTransformer, train_data_loader, cnntransformer_optimizer, criterion, device, num_epochs))
     # test_losses[1] = test(CNNTransformer, test_data_loader, criterion, device)
 
-    # TCN = TemporalConvNet2D(input_size, num_features, kernel_size, dropout)
-    # tcn_optimizer = Adam(TCN.parameters(), lr=learning_rate)
-    # train_losses.append(train(TCN, train_data_loader, tcn_optimizer, criterion, device, num_epochs))
-    # test_losses[2] = test(TCN, test_data_loader, criterion, device)
+    TCN = TemporalConvNet2D(12, num_features, kernel_size, dropout).to(device)
+    tcn_optimizer = Adam(TCN.parameters(), lr=learning_rate)
+    train_losses.append(train(TCN, train_data_loader, tcn_optimizer, criterion, device, num_epochs))
+    test_losses[2] = test(TCN, test_data_loader, criterion, device)
 
-    CLSTM = ConvLSTM(num_features, 120, kernel_size, num_layers).to(device)
-    clstm_optimizer = Adam(CLSTM.parameters(), lr=learning_rate)
-    train_losses.append(train(CLSTM, train_data_loader, clstm_optimizer, criterion, device, num_epochs))
-    test_losses[3] = test(CLSTM, test_data_loader, criterion, device)
+    # CLSTM = ConvLSTM(num_features, 120, kernel_size, num_layers).to(device)
+    # clstm_optimizer = Adam(CLSTM.parameters(), lr=learning_rate)
+    # train_losses.append(train(CLSTM, train_data_loader, clstm_optimizer, criterion, device, num_epochs))
+    # test_losses[3] = test(CLSTM, test_data_loader, criterion, device)
 
     # Visualize the results
     visualize_results(train_losses, test_losses, model_names, num_epochs)
