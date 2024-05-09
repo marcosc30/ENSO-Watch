@@ -75,6 +75,8 @@ class ConvLSTM(nn.Module):
     def forward(self, input, prev_state=None):
         # Retrieve the device of the input tensor
         device = input.device
+        h_prev = h_prev.to(input.device)
+        c_prev = c_prev.to(input.device)
 
         batch_size, seq_len, channels, height, width = input.size()
         if prev_state is None:

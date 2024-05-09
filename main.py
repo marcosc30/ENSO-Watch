@@ -1,4 +1,5 @@
 import torch
+import os
 import torch.nn as nn
 from torch.optim import Adam
 from torch.utils.data import DataLoader
@@ -50,6 +51,41 @@ def main():
 
     ## For each model: Instantiate, define optimizer, train, test loss
 
+    models = {
+        'CNNLSTM': {
+            'model_path': 'cnn-lstm-model.pth',
+            'model': CNNLSTM,
+            'optimizer': Adam(CNNLSTM.parameters(), lr=learning_rate),
+            'index': 0
+        },
+        'CNNTransformer': {
+            'model_path': 'cnn-transformer-model.pth',
+            'model': CNNTransformer,
+            'optimizer': Adam(CNNTransformer.parameters(), lr=learning_rate),
+            'index': 1
+        },
+        'CLSTM': {
+            'model_path': 'clstm-model.pth',
+            'model': CLSTM,
+            'optimizer': Adam(CLSTM.parameters(), lr=learning_rate),
+            'index': 3
+        }
+    }
+
+    for model_name, model_info in models.items():
+      model_path = model_info['model_path']
+      model = model_info['model']
+      model_optimizer = model_info['optimizer']
+      index = model_info['index']
+
+      if os.path.exists(model_path):
+        model.load_state_dict(torch.load(model_path))
+      else:
+        train_losses.append(train(model, train_data_loader, model_optimizer, criterion, device, num_epochs))
+        torch.save(model.state_dict(), model_path)
+      test_losses[index] = test(model, test_data_loader, criterion, device)
+
+
     # CNNLSTM = WeatherForecasterCNNLSTM(num_features, hidden_size_cnnlstm, num_layers, output_size, kernel_size, dropout).to(device)
     # cnnlstm_optimizer = Adam(CNNLSTM.parameters(), lr=learning_rate)
     # train_losses.append(train(CNNLSTM, train_data_loader, cnnlstm_optimizer, criterion, device, num_epochs))
@@ -58,12 +94,12 @@ def main():
     # CNNTransformer = WeatherForecasterCNNTransformer(num_features, hidden_size_cnntransformer, num_layers, output_size, kernel_size, dropout).to(device)
     # cnntransformer_optimizer = Adam(CNNTransformer.parameters(), lr=learning_rate)
     # train_losses.append(train(CNNTransformer, train_data_loader, cnntransformer_optimizer, criterion, device, num_epochs))
-    # test_losses[1] = test(CNNTransformer, test_data_loader, criterion, device)
+    # # test_losses[1] = test(CNNTransformer, test_data_loader, criterion, device)
 
-    TCN = TemporalConvNet2D(12, num_features, kernel_size, dropout).to(device)
-    tcn_optimizer = Adam(TCN.parameters(), lr=learning_rate)
-    train_losses.append(train(TCN, train_data_loader, tcn_optimizer, criterion, device, num_epochs))
-    test_losses[2] = test(TCN, test_data_loader, criterion, device)
+    # TCN = TemporalConvNet2D(12, num_features, kernel_size, dropout).to(device)
+    # tcn_optimizer = Adam(TCN.parameters(), lr=learning_rate)
+    # train_losses.append(train(TCN, train_data_loader, tcn_optimizer, criterion, device, num_epochs))
+    # test_losses[2] = test(TCN, test_data_loader, criterion, device)
 
     # CLSTM = ConvLSTM(num_features, 120, kernel_size, num_layers).to(device)
     # clstm_optimizer = Adam(CLSTM.parameters(), lr=learning_rate)
